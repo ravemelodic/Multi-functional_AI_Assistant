@@ -11,8 +11,8 @@ Data sources (CSV files in the ``data/`` directory):
 
 Usage
 -----
-    python -m rag.ingest                  # uses config.ini
-    python -m rag.ingest --config ../custom.ini
+    python -m app.rag.ingest                  # uses config.ini
+    python -m app.rag.ingest --config ../custom.ini
 
 Prerequisites
 -------------
@@ -33,9 +33,9 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 
 # Add project root to sys.path so imports work when run as script
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from configs.settings import settings
+from app.configs.settings import settings
 
 logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -43,7 +43,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("rag.ingest")
 
-DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 
 
 def read_courses_csv(path: Path) -> list[Document]:
@@ -133,7 +133,7 @@ async def ingest(courses_path: Path = None, assignments_path: Path = None):
     chunked = chunk_documents(all_docs)
 
     # Build embeddings
-    from rag.retriever import get_embeddings
+    from app.rag.retriever import get_embeddings
 
     logger.info("Using embedding model: %s", settings.EMBEDDING_MODEL)
     embeddings = get_embeddings()

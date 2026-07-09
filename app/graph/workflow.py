@@ -10,8 +10,8 @@ from typing import Literal
 
 from langgraph.graph import StateGraph, END
 
-from graph.state import AgentState
-from graph.nodes import (
+from app.graph.state import AgentState
+from app.graph.nodes import (
     classify_intent_node,
     retrieve_rag_node,
     retrieve_conversation_memory_node,

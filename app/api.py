@@ -33,11 +33,11 @@ from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 # Ensure project root is on sys.path
-HERE = Path(__file__).resolve().parent
+HERE = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(HERE))
 
-from configs.settings import settings
-from rag.parse_courses import parse_csv_content, parse_json_content, store_to_milvus
+from app.configs.settings import settings
+from app.rag.parse_courses import parse_csv_content, parse_json_content, store_to_milvus
 
 # ------------------------------------------------------------------ #
 #  Logging                                                            #
@@ -78,7 +78,7 @@ async def root():
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_page():
     """Serve the admin web interface (single-page HTML)."""
-    html_path = HERE / "api_templates" / "index.html"
+    html_path = HERE / "app" / "api_templates" / "index.html"
     if html_path.exists():
         return HTMLResponse(html_path.read_text(encoding="utf-8"))
     return HTMLResponse("<h1>Admin page not found</h1><p>api_templates/index.html is missing.</p>")

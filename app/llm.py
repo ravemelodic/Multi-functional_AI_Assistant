@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 # Allow duck-typing: anything with .CHATGPT_API_KEY / .CHATGPT_BASE_URL / …
 # is accepted.  We import the concrete type only for type hints.
 try:
-    from configs.settings import Settings as _SettingsType
+    from app.configs.settings import Settings as _SettingsType
 except ImportError:
     _SettingsType = None  # not available when run as __main__
 

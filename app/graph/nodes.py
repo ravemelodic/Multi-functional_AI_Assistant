@@ -13,9 +13,9 @@ import logging
 import asyncio
 from typing import Any
 
-from graph.state import AgentState
-from configs.settings import settings
-from ChatGPT_HKBU import ChatGPT
+from app.graph.state import AgentState
+from app.configs.settings import settings
+from app.llm import ChatGPT
 
 # ------------------------------------------------------------------ #
 #  Module-level globals (initialised once when the graph is built)    #

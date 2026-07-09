@@ -29,7 +29,7 @@ from langchain_openai import OpenAIEmbeddings, AzureOpenAIEmbeddings
 from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStoreRetriever
 
-from configs.settings import settings
+from app.configs.settings import settings
 
 logger = logging.getLogger(__name__)
 

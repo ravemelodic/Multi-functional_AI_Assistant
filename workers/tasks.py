@@ -11,8 +11,8 @@ import configparser
 sys.path.insert(0, '/comp7940-lab')
 
 # Import project modules
-from ChatGPT_HKBU import ChatGPT
-from image_to_video import ImageToVideoGenerator
+from app.llm import ChatGPT
+from app.video import ImageToVideoGenerator
 
 # Configure logging
 logging.basicConfig(

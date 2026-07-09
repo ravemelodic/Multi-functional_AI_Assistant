@@ -18,14 +18,9 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy Python files explicitly
-COPY ChatGPT_HKBU.py .
-COPY image_to_video.py .
-COPY tasks.py .
-COPY worker.py .
-COPY chatbot_agent.py .
-
-# Copy configuration file
+# Copy application packages and config
+COPY app/ app/
+COPY workers/ workers/
 COPY config.ini .
 
 # Create necessary directories

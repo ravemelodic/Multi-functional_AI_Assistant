@@ -109,4 +109,4 @@ class Settings(BaseSettings):
 
 
 # Module-level singleton – import `settings` everywhere.
-settings = Settings.from_ini(str(Path(__file__).resolve().parent.parent / "config.ini"))
+settings = Settings.from_ini(str(Path(__file__).resolve().parent.parent.parent / "config.ini"))

@@ -29,10 +29,10 @@ from telegram.ext import (
     CommandHandler,
 )
 
-from graph.state import AgentState
-from graph.workflow import app as langgraph_app
-from graph.nodes import init_global_resources, close_global_resources
-from configs.settings import settings
+from app.graph.state import AgentState
+from app.graph.workflow import app as langgraph_app
+from app.graph.nodes import init_global_resources, close_global_resources
+from app.configs.settings import settings
 
 # ------------------------------------------------------------------ #
 #  Logging                                                           #

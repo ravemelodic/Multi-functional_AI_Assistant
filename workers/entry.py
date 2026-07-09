@@ -10,7 +10,7 @@ if __name__ == '__main__':
     print(f"Starting Celery worker (type: {worker_type})")
     
     # Build celery worker command arguments
-    argv = ['celery', '-A', 'tasks', 'worker', '--loglevel=INFO']
+    argv = ['celery', '-A', 'workers.tasks', 'worker', '--loglevel=INFO']
     
     # Configure which tasks this worker should handle
     if worker_type == 'video':

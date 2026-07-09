@@ -106,7 +106,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: chatbot_bot
-    command: python chatbot_agent.py
+    command: python -m app.bot
     depends_on:
       - redis
       - milvus
@@ -135,7 +135,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: python worker.py
+    command: python -m workers.entry
     depends_on:
       - redis
     environment:
@@ -171,7 +171,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: python worker.py
+    command: python -m workers.entry
     depends_on:
       - redis
     environment:
@@ -205,7 +205,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: chatbot_api
-    command: uvicorn api_server:app --host 0.0.0.0 --port 8000
+    command: uvicorn app.api:app --host 0.0.0.0 --port 8000
     depends_on:
       - milvus
     environment:
