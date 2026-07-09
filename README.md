@@ -380,46 +380,51 @@ Telegram 用户                    管理员浏览器
 ## 📁 项目结构
 
 ```
-chatbot-7940/
+Multi-functional_AI_Assistant/
 │
-├── chatbot_agent.py              # Telegram 机器人主程序（LangGraph 驱动）
-├── ChatGPT_HKBU.py              # ChatGPT 异步/同步客户端
-├── image_to_video.py            # 视频生成器（SiliconFlow API）
-├── tasks.py                     # Celery 任务定义
-├── worker.py                    # Celery 启动入口
-├── api_server.py                # FastAPI 管理后台服务
-│
-├── configs/
+├── app/                             # 主程序包
 │   ├── __init__.py
-│   └── settings.py              # Pydantic 配置管理（config.ini + 环境变量）
+│   ├── bot.py                       # Telegram 机器人主程序（LangGraph 驱动）
+│   ├── llm.py                       # Azure OpenAI 客户端（熔断器+重试）
+│   ├── video.py                     # 视频生成器（SiliconFlow API）
+│   ├── api.py                       # FastAPI 管理后台服务
+│   │
+│   ├── configs/
+│   │   ├── __init__.py
+│   │   └── settings.py              # Pydantic 配置管理
+│   │
+│   ├── graph/
+│   │   ├── __init__.py
+│   │   ├── state.py                 # AgentState 类型定义
+│   │   ├── nodes.py                 # LangGraph 节点函数（10 个节点）
+│   │   └── workflow.py              # StateGraph 构建与编译
+│   │
+│   ├── rag/
+│   │   ├── __init__.py
+│   │   ├── retriever.py             # 混合检索（BM25+稠密+RRF）+ 对话记忆
+│   │   ├── ingest.py                # CSV → Milvus 数据灌入
+│   │   ├── ingest_documents.py      # PDF/文档灌入工具
+│   │   └── parse_courses.py         # CSV/JSON 解析 → Milvus
+│   │
+│   └── api_templates/
+│       └── index.html               # Web 管理后台页面
 │
-├── graph/
+├── workers/                          # Celery 工作进程
 │   ├── __init__.py
-│   ├── state.py                 # AgentState 类型定义（19 个字段）
-│   ├── nodes.py                 # LangGraph 节点函数（12 个节点）
-│   └── workflow.py              # StateGraph 构建与编译
-│
-├── rag/
-│   ├── __init__.py
-│   ├── retriever.py             # Milvus 向量检索器 + 对话记忆存储/检索
-│   ├── ingest.py                # CSV → Milvus 数据灌入
-│   ├── ingest_documents.py      # PDF/文档灌入工具
-│   └── parse_courses.py         # CSV/JSON 解析 → Milvus
-│
-├── api_templates/
-│   └── index.html               # Web 管理后台页面
+│   ├── tasks.py                      # 视频生成/OCR/图片分析任务
+│   └── entry.py                      # Worker 启动入口
 │
 ├── data/
-│   ├── courses.csv              # 课程数据示例
-│   └── assignments.csv          # 作业数据示例
+│   ├── courses.csv                   # 课程数据示例
+│   └── assignments.csv               # 作业数据示例
 │
-├── docker-compose.yml           # 容器编排（7 个服务）
-├── Dockerfile                   # Docker 镜像定义
-├── requirements.txt             # Python 依赖清单
-├── config.ini                   # 配置文件（API 密钥等）
-├── ARCHITECTURE.md              # 系统架构文档
-├── API_DOCS.md                  # 数据管理接口文档
-└── README.md                    # 本文件
+├── docker-compose.yml                # 容器编排（10 个服务）
+├── Dockerfile                        # Docker 镜像定义
+├── requirements.txt                  # Python 依赖清单
+├── config.ini                        # 配置文件（API 密钥等）
+├── ARCHITECTURE.md                   # 系统架构文档
+├── API_DOCS.md                       # 数据管理接口文档
+└── README.md                         # 本文件
 ```
 
 ---

@@ -16,10 +16,10 @@ GET  /api/stats      —  Quick stats from Milvus
 Usage
 -----
     # Production
-    uvicorn api_server:app --host 0.0.0.0 --port 8000
+    uvicorn app.api:app --host 0.0.0.0 --port 8000
 
     # Development (hot-reload)
-    python api_server.py
+    python -m app.api
 """
 
 import json as json_mod
@@ -46,7 +46,7 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     level=logging.INFO,
 )
-logger = logging.getLogger("api_server")
+logger = logging.getLogger("app.api")
 
 # ------------------------------------------------------------------ #
 #  FastAPI app                                                        #
@@ -241,4 +241,4 @@ async def stats():
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("api_server:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("app.api:app", host="0.0.0.0", port=8000, reload=True)

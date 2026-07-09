@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     TELEGRAM_ACCESS_TOKEN: str = ""
 
     # ------------------------------------------------------------------ #
-    #  Azure OpenAI (ChatGPT_HKBU)                                       #
+    #  Azure OpenAI (app.llm)                                       #
     # ------------------------------------------------------------------ #
     CHATGPT_API_KEY: str = ""
     CHATGPT_BASE_URL: str = ""

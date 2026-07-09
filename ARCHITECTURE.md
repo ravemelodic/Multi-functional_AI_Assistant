@@ -221,9 +221,9 @@ class AgentState(TypedDict):
 | 模块 | 文件 | 说明 |
 |------|------|------|
 | Settings | `configs/settings.py` | Pydantic 配置管理，支持 `config.ini` + 环境变量 |
-| Image-to-Video | `image_to_video.py` | SiliconFlow Wan-AI API 封装 |
-| Celery Tasks | `tasks.py` | 视频生成、文档分析、图片分析任务 |
-| Worker Entry | `worker.py` | Celery Worker 启动入口 |
+| Image-to-Video | `app/video.py` | SiliconFlow Wan-AI API 封装 |
+| Celery Tasks | `workers/tasks.py` | 视频生成、文档分析、图片分析任务 |
+| Worker Entry | `workers/entry.py` | Celery Worker 启动入口 |
 
 ---
 

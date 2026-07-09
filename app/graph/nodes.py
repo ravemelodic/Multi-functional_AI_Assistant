@@ -351,7 +351,7 @@ async def receive_video_image_node(state: AgentState) -> dict[str, Any]:
         }
 
     # -- submit Celery image-analysis task -------------------------------
-    from tasks import analyze_image_task
+    from workers.tasks import analyze_image_task
 
     try:
         task = analyze_image_task.apply_async(
@@ -441,7 +441,7 @@ async def receive_video_prompt_node(state: AgentState) -> dict[str, Any]:
     output_video = f"/comp7940-lab/temp/output_video_{state['user_id']}.mp4"
 
     # Submit Celery task ---------------------------------------------------
-    from tasks import generate_video_task
+    from workers.tasks import generate_video_task
 
     try:
         task = generate_video_task.apply_async(
@@ -555,7 +555,7 @@ async def analyze_document_node(state: AgentState) -> dict[str, Any]:
         telegram_file = await file.get_file()
         await telegram_file.download_to_drive(temp_path)
 
-        from tasks import analyze_document_task
+        from workers.tasks import analyze_document_task
 
         task = analyze_document_task.apply_async(
             args=[temp_path, "pdf", state["user_id"]],
