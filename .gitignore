@@ -1,0 +1,16 @@
+config.ini
+
+logs/
+*.log
+
+temp/
+*.tmp
+*.pyc
+__pycache__/
+
+.env
+.DS_Store
+
+*.mp4
+*.avi
+*.mov

@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Course Data Manager — Chatbot RAG</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>
+  body { background: #f5f7fa; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+  .navbar { background: linear-gradient(135deg, #6366f1, #8b5cf6) !important; }
+  .card { border: none; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.08); margin-bottom: 1.5rem; }
+  .card-header { background: transparent; border-bottom: 1px solid #e9ecef; font-weight: 600; padding: 1rem 1.25rem; }
+  .card-body { padding: 1.25rem; }
+  .drop-zone {
+    border: 2px dashed #d1d5db; border-radius: 12px; padding: 2.5rem 1.5rem;
+    text-align: center; cursor: pointer; transition: all .2s; background: #fafbfc;
+  }
+  .drop-zone:hover, .drop-zone.drag-over { border-color: #6366f1; background: #eef2ff; }
+  .drop-zone-icon { font-size: 2.5rem; color: #6366f1; margin-bottom: .5rem; }
+  .result-card { transition: opacity .3s; }
+  .result-card.success { border-left: 4px solid #22c55e; }
+  .result-card.error { border-left: 4px solid #ef4444; }
+  .badge-source { background: #e0e7ff; color: #4338ca; font-size: .75rem; }
+  .toast-container { z-index: 9999; }
+  .preview-area { max-height: 300px; overflow-y: auto; font-size: .8rem; }
+  #statsTable td:first-child { font-weight: 500; }
+  .btn-primary { background: #6366f1; border-color: #6366f1; }
+  .btn-primary:hover { background: #4f46e5; border-color: #4f46e5; }
+  .btn-outline-primary { color: #6366f1; border-color: #6366f1; }
+  .btn-outline-primary:hover { background: #6366f1; border-color: #6366f1; color: #fff; }
+  code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: .85em; }
+  .format-hint { font-size: .85rem; color: #6b7280; }
+</style>
+</head>
+<body>
+
+<!-- ========== NAVBAR ========== -->
+<nav class="navbar navbar-expand-lg navbar-dark py-3">
+  <div class="container">
+    <span class="navbar-brand fw-bold fs-5">📚 Course Data Manager</span>
+    <span class="badge bg-light text-dark ms-2">v1.0</span>
+    <div class="ms-auto">
+      <span class="text-white-50 small" id="healthBadge">⏳ connecting…</span>
+    </div>
+  </div>
+</nav>
+
+<div class="container py-4">
+
+  <!-- ========== ALERT ========== -->
+  <div id="mainAlert" class="alert d-none" role="alert"></div>
+
+  <!-- ========== ROW ========== -->
+  <div class="row g-4">
+
+    <!-- ====== LEFT COLUMN ====== -->
+    <div class="col-lg-7">
+
+      <!-- ------ Upload card ------ -->
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span>📤 Upload Course Data</span>
+          <div class="btn-group btn-group-sm">
+            <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#templateModal">View Template</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <ul class="nav nav-tabs mb-3" id="uploadTab" role="tablist">
+            <li class="nav-item" role="presentation">
+              <button class="nav-link active" id="upload-file-tab" data-bs-toggle="tab" data-bs-target="#uploadFile" type="button" role="tab">Upload File</button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link" id="upload-json-tab" data-bs-toggle="tab" data-bs-target="#uploadJson" type="button" role="tab">Edit JSON</button>
+            </li>
+          </ul>
+
+          <div class="tab-content">
+            <!-- Tab 1: Upload file -->
+            <div class="tab-pane fade show active" id="uploadFile" role="tabpanel">
+              <div class="mb-3">
+                <label class="me-3 fw-medium">Data type:</label>
+                <div class="form-check form-check-inline">
+                  <input class="form-check-input" type="radio" name="sourceType" id="stCourses" value="courses" checked>
+                  <label class="form-check-label" for="stCourses">📖 Courses</label>
+                </div>
+                <div class="form-check form-check-inline">
+                  <input class="form-check-input" type="radio" name="sourceType" id="stAssignments" value="assignments">
+                  <label class="form-check-label" for="stAssignments">📝 Assignments</label>
+                </div>
+              </div>
+
+              <div class="drop-zone" id="dropZone">
+                <div class="drop-zone-icon">📁</div>
+                <p class="mb-1 fw-medium">Drag & drop CSV / JSON file here</p>
+                <p class="text-muted small mb-3">or click to browse</p>
+                <input type="file" id="fileInput" accept=".csv,.json" class="d-none">
+                <button type="button" class="btn btn-outline-primary btn-sm" onclick="document.getElementById('fileInput').click()">Choose File</button>
+              </div>
+              <div id="fileName" class="mt-2 small text-muted d-none"></div>
+              <div class="mt-3 d-grid">
+                <button class="btn btn-primary" id="uploadBtn" disabled>Upload to Milvus</button>
+              </div>
+            </div>
+
+            <!-- Tab 2: JSON input -->
+            <div class="tab-pane fade" id="uploadJson" role="tabpanel">
+              <div class="mb-3">
+                <label class="me-3 fw-medium">Data type:</label>
+                <div class="form-check form-check-inline">
+                  <input class="form-check-input" type="radio" name="jsonSourceType" id="jsonStCourses" value="courses" checked>
+                  <label class="form-check-label" for="jsonStCourses">📖 Courses</label>
+                </div>
+                <div class="form-check form-check-inline">
+                  <input class="form-check-input" type="radio" name="jsonSourceType" id="jsonStAssignments" value="assignments">
+                  <label class="form-check-label" for="jsonStAssignments">📝 Assignments</label>
+                </div>
+              </div>
+              <textarea class="form-control font-monospace small" id="jsonInput" rows="8" placeholder='[{"course_code": "COMP7940", "course_name": "AI and Chatbot Development", ...}]'></textarea>
+              <div class="mt-2 d-grid">
+                <button class="btn btn-primary" id="ingestBtn">Ingest JSON to Milvus</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ------ Results ------ -->
+      <div class="card" id="resultsCard">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span>📋 Upload Results</span>
+          <button class="btn btn-sm btn-outline-secondary" onclick="clearResults()">Clear</button>
+        </div>
+        <div class="card-body" id="resultsBody">
+          <p class="text-muted small mb-0" id="resultsPlaceholder">No uploads yet.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ====== RIGHT COLUMN ====== -->
+    <div class="col-lg-5">
+
+      <!-- ------ Quick start ------ -->
+      <div class="card">
+        <div class="card-header">🚀 Quick Start</div>
+        <div class="card-body small">
+          <ol class="mb-0 ps-3">
+            <li>Prepare a CSV/JSON file with course or assignment data</li>
+            <li>Upload it via the form on the left</li>
+            <li>Data is chunked, embedded, and stored in Milvus</li>
+            <li>Users can now query this data through the Telegram bot</li>
+          </ol>
+          <hr>
+          <div class="format-hint">
+            <strong>CSV format:</strong><br>
+            <code>course_code,course_name,class_time,location,description</code>
+          </div>
+        </div>
+      </div>
+
+      <!-- ------ Stats ------ -->
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span>📊 Milvus Stats</span>
+          <button class="btn btn-sm btn-outline-secondary" onclick="refreshStats()">🔄 Refresh</button>
+        </div>
+        <div class="card-body" id="statsBody">
+          <p class="text-muted small mb-0" id="statsPlaceholder">Click refresh to load stats…</p>
+        </div>
+      </div>
+
+      <!-- ------ Bulk examples ------ -->
+      <div class="card">
+        <div class="card-header">💡 Batch Import from CLI</div>
+        <div class="card-body small">
+          <p class="mb-2">Also available via command line:</p>
+          <code class="d-block p-2 mb-2" style="background:#1e293b;color:#e2e8f0;border-radius:8px;">
+curl -X POST http://localhost:8000/api/upload \<br>
+&nbsp;&nbsp;-F "file=@courses.csv" \<br>
+&nbsp;&nbsp;-F "source_type=courses"
+          </code>
+          <code class="d-block p-2" style="background:#1e293b;color:#e2e8f0;border-radius:8px;">
+curl -X POST http://localhost:8000/api/ingest \<br>
+&nbsp;&nbsp;-H "Content-Type: application/json" \<br>
+&nbsp;&nbsp;-d @courses.json
+          </code>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== TEMPLATE MODAL ========== -->
+<div class="modal fade" id="templateModal" tabindex="-1">
+<div class="modal-dialog modal-lg">
+<div class="modal-content">
+<div class="modal-header">
+  <h5 class="modal-title">CSV Template Reference</h5>
+  <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+</div>
+<div class="modal-body">
+  <h6>📖 courses.csv</h6>
+  <pre class="preview-area p-2 mb-3" style="background:#f1f5f9;border-radius:8px;">course_code,course_name,class_time,location,description,instructor
+COMP7940,AI and Chatbot Development,"Monday 14:30-17:15",DLB 514,Development of AI-powered chatbots,Dr. Chan
+COMP7930,Big Data Analytics,"Wednesday 09:00-11:45",ACB 302,Big data processing with Spark,Prof. Lee</pre>
+
+  <h6>📝 assignments.csv</h6>
+  <pre class="preview-area p-2 mb-3" style="background:#f1f5f9;border-radius:8px;">course_code,title,deadline,description,weight
+COMP7940,Chatbot Project,2025-04-15 23:59,Develop a Telegram chatbot using LangGraph,40%
+COMP7940,Quiz 1,2025-03-01 23:59,Basic concepts of NLP,10%</pre>
+
+  <h6>📦 JSON equivalent</h6>
+  <pre class="preview-area p-2" style="background:#f1f5f9;border-radius:8px;">[
+  {
+    "course_code": "COMP7940",
+    "course_name": "AI and Chatbot Development",
+    "class_time": "Monday 14:30-17:15",
+    "location": "DLB 514",
+    "description": "Development of AI-powered chatbots"
+  }
+]</pre>
+</div>
+<div class="modal-footer">
+  <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+</div>
+</div>
+</div>
+</div>
+
+<!-- ========== TOAST ========== -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// ===================================================================
+//  Utility helpers
+// ===================================================================
+const API_BASE = '';
+
+function showAlert(msg, type='success') {
+  const el = document.getElementById('mainAlert');
+  el.className = `alert alert-${type} d-flex align-items-center`;
+  el.innerHTML = `<div>${msg}</div>`;
+  setTimeout(() => el.classList.add('d-none'), 6000);
+}
+
+function showToast(msg, type='success') {
+  const id = 't' + Date.now();
+  const icon = type === 'success' ? '✅' : type === 'danger' ? '❌' : 'ℹ️';
+  const html = `
+    <div id="${id}" class="toast align-items-center text-bg-${type === 'danger' ? 'danger' : 'success'} border-0" role="alert">
+      <div class="d-flex"><div class="toast-body">${icon} ${msg}</div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>
+    </div>`;
+  document.querySelector('.toast-container').insertAdjacentHTML('beforeend', html);
+  const t = new bootstrap.Toast(document.getElementById(id), {delay: 4000});
+  t.show();
+  document.getElementById(id).addEventListener('hidden.bs.toast', () => document.getElementById(id).remove());
+}
+
+function addResult(type, message, detail) {
+  const body = document.getElementById('resultsBody');
+  document.getElementById('resultsPlaceholder')?.remove();
+  const card = document.createElement('div');
+  card.className = `result-card ${type} p-2 mb-2 small`;
+  card.style.borderLeft = type === 'success' ? '4px solid #22c55e' : '4px solid #ef4444';
+  card.style.background = '#f8fafc';
+  card.style.borderRadius = '8px';
+  card.innerHTML = `<div class="fw-medium">${message}</div>${detail ? `<div class="text-muted mt-1">${detail}</div>` : ''}`;
+  body.prepend(card);
+}
+
+// ===================================================================
+//  Health check
+// ===================================================================
+async function checkHealth() {
+  try {
+    const r = await fetch(`${API_BASE}/api/health`);
+    const d = await r.json();
+    document.getElementById('healthBadge').innerHTML = `✅ connected · ${d.collection}`;
+  } catch {
+    document.getElementById('healthBadge').innerHTML = '❌ offline';
+  }
+}
+checkHealth();
+
+// ===================================================================
+//  File upload tab
+// ===================================================================
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const uploadBtn = document.getElementById('uploadBtn');
+let selectedFile = null;
+
+dropZone.addEventListener('click', () => fileInput.click());
+
+dropZone.addEventListener('dragover', e => {
+  e.preventDefault();
+  dropZone.classList.add('drag-over');
+});
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+
+fileInput.addEventListener('change', () => {
+  if (fileInput.files.length) handleFile(fileInput.files[0]);
+});
+
+function handleFile(file) {
+  selectedFile = file;
+  document.getElementById('fileName').className = 'mt-2 small text-muted';
+  document.getElementById('fileName').textContent = `📎 ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+  uploadBtn.disabled = false;
+}
+
+uploadBtn.addEventListener('click', async () => {
+  if (!selectedFile) return;
+  const sourceType = document.querySelector('input[name="sourceType"]:checked').value;
+  const form = new FormData();
+  form.append('file', selectedFile);
+  form.append('source_type', sourceType);
+
+  uploadBtn.disabled = true;
+  uploadBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Uploading…';
+
+  try {
+    const r = await fetch(`${API_BASE}/api/upload`, { method: 'POST', body: form });
+    const d = await r.json();
+    if (d.success) {
+      showToast(d.message, 'success');
+      addResult('success', `✅ ${selectedFile.name}`, `${d.records_parsed} records → ${d.chunks_stored} chunks in Milvus`);
+    } else {
+      showToast(d.detail || 'Upload failed', 'danger');
+      addResult('error', `❌ ${selectedFile.name}`, d.detail || 'Unknown error');
+    }
+  } catch (err) {
+    showToast(`Network error: ${err.message}`, 'danger');
+    addResult('error', `❌ ${selectedFile.name}`, err.message);
+  } finally {
+    uploadBtn.disabled = false;
+    uploadBtn.textContent = 'Upload to Milvus';
+    selectedFile = null;
+    document.getElementById('fileName').className = 'mt-2 small text-muted d-none';
+  }
+});
+
+// ===================================================================
+//  JSON ingest tab
+// ===================================================================
+document.getElementById('ingestBtn').addEventListener('click', async () => {
+  const jsonStr = document.getElementById('jsonInput').value.trim();
+  if (!jsonStr) { showAlert('Please enter JSON data.', 'warning'); return; }
+
+  let parsed;
+  try { parsed = JSON.parse(jsonStr); } catch {
+    showAlert('Invalid JSON. Check the syntax.', 'danger');
+    return;
+  }
+
+  const sourceType = document.querySelector('input[name="jsonSourceType"]:checked').value;
+  const btn = document.getElementById('ingestBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Ingesting…';
+
+  try {
+    const r = await fetch(`${API_BASE}/api/ingest`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source_type: sourceType, data: parsed }),
+    });
+    const d = await r.json();
+    if (d.success) {
+      showToast(d.message, 'success');
+      addResult('success', `✅ JSON (${sourceType})`, `${d.records_parsed} records → ${d.chunks_stored} chunks`);
+      document.getElementById('jsonInput').value = '';
+    } else {
+      showToast(d.detail || 'Ingest failed', 'danger');
+      addResult('error', '❌ JSON ingest', d.detail || 'Unknown error');
+    }
+  } catch (err) {
+    showToast(`Network error: ${err.message}`, 'danger');
+    addResult('error', '❌ JSON ingest', err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Ingest JSON to Milvus';
+  }
+});
+
+// ===================================================================
+//  Stats
+// ===================================================================
+async function refreshStats() {
+  const body = document.getElementById('statsBody');
+  body.innerHTML = '<p class="text-muted small mb-0"><span class="spinner-border spinner-border-sm"></span> Loading…</p>';
+  try {
+    const r = await fetch(`${API_BASE}/api/stats`);
+    const d = await r.json();
+    if (d.total_samples_shown > 0) {
+      let html = `<table class="table table-sm table-borderless mb-0" id="statsTable"><thead><tr><th>Entry</th><th class="text-end">Chunks</th></tr></thead><tbody>`;
+      for (const e of d.entries) {
+        html += `<tr><td>${e.key}</td><td class="text-end">${e.count}</td></tr>`;
+      }
+      html += `</tbody></table><div class="text-muted small mt-2">Collection: <code>${d.collection}</code></div>`;
+      body.innerHTML = html;
+    } else {
+      body.innerHTML = '<p class="text-muted small mb-0">📭 No data in Milvus yet. Upload something!</p>';
+    }
+  } catch {
+    body.innerHTML = '<p class="text-muted small mb-0">❌ Could not reach server.</p>';
+  }
+}
+
+function clearResults() {
+  document.getElementById('resultsBody').innerHTML = '<p class="text-muted small mb-0" id="resultsPlaceholder">No uploads yet.</p>';
+}
+</script>
+</body>
+</html>

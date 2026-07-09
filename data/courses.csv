@@ -1,0 +1,4 @@
+course_code,course_name,class_time,location,description,instructor
+COMP7940,AI and Chatbot Development,"Monday 14:30-17:15",DLB 514,Development of AI-powered chatbots using LLMs and LangGraph,Dr. Chan
+COMP7930,Big Data Analytics,"Wednesday 09:00-11:45",ACB 302,Big data processing with Hadoop and Spark,Prof. Lee
+COMP7510,Machine Learning,"Tuesday 14:30-17:15",DLB 614,Fundamental machine learning algorithms and applications,Dr. Wong

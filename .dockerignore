@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Git
+.git/
+.gitignore
+.github/
+
+# Logs (will be created in container)
+logs/
+*.log
+
+# Temporary files (will be created in container)
+temp/
+*.tmp
+output_*.mp4
+temp_*.jpg
+temp_*.png
+
+# Test files
+test.png
+
+# Documentation (不需要复制到容器)
+*.md
+
+# Standalone version (不需要，只用 agent 版本)
+chatbot_standalone.py
+
+# Docker files
+docker-compose.yml
+Dockerfile.bot
+Dockerfile.worker
+.dockerignore
+
+# Scripts
+deploy.sh
+Makefile
+
+# Config example (不需要，只需要 config.ini)
+config.ini.example

@@ -1,0 +1,5 @@
+course_code,title,deadline,description,weight
+COMP7940,Chatbot Project,2025-04-15 23:59,Develop a Telegram chatbot using LangGraph,40%
+COMP7940,Quiz 1,2025-03-01 23:59,Basic concepts of NLP and chatbot design,10%
+COMP7930,Data Analysis Report,2025-04-20 23:59,Analyze a big dataset using Spark,30%
+COMP7510,ML Model Project,2025-04-30 23:59,Train and evaluate a classification model,35%

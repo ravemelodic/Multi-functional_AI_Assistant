@@ -1,0 +1,233 @@
+version: '3.8'
+
+services:
+
+  # ================================================================ #
+  #  Redis – message broker for Celery task queue                    #
+  # ================================================================ #
+  redis:
+    image: redis:7-alpine
+    container_name: chatbot_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - chatbot_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ================================================================ #
+  #  etcd – configuration store for Milvus                           #
+  # ================================================================ #
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.16
+    container_name: chatbot_etcd
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+      - ETCD_SNAPSHOT_COUNT=50000
+    volumes:
+      - etcd_data:/etcd
+    command: >
+      etcd
+      --advertise-client-urls http://0.0.0.0:2379
+      --listen-client-urls http://0.0.0.0:2379
+      --data-dir /etcd
+    networks:
+      - chatbot_network
+    restart: unless-stopped
+
+  # ================================================================ #
+  #  MinIO – object storage for Milvus                               #
+  # ================================================================ #
+  minio:
+    image: minio/minio:RELEASE.2024-11-17T00-39-20Z
+    container_name: chatbot_minio
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+    volumes:
+      - minio_data:/minio_data
+    command: minio server /minio_data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    networks:
+      - chatbot_network
+    restart: unless-stopped
+
+  # ================================================================ #
+  #  Milvus – vector database                                        #
+  # ================================================================ #
+  milvus:
+    image: milvusdb/milvus:v2.4.17
+    container_name: chatbot_milvus
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+    volumes:
+      - milvus_data:/var/lib/milvus
+    ports:
+      - "19530:19530"   # gRPC
+      - "9091:9091"     # HTTP metrics
+    depends_on:
+      etcd:
+        condition: service_started
+      minio:
+        condition: service_started
+    networks:
+      - chatbot_network
+    restart: unless-stopped
+    command: ["milvus", "run", "standalone"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ================================================================ #
+  #  Bot Agent – handles Telegram interactions using LangGraph       #
+  # ================================================================ #
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: chatbot_bot
+    command: python chatbot_agent.py
+    depends_on:
+      - redis
+      - milvus
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - MILVUS_HOST=milvus
+      - MILVUS_PORT=19530
+      - EMBEDDING_API_KEY=sk-mubvhickdwyfyifhjthqkidqthzdxbvpulkzgyhjhftatqxz
+      - EMBEDDING_BASE_URL=https://api.siliconflow.cn/v1
+      - EMBEDDING_MODEL=BAAI/bge-m3
+    volumes:
+      - ./config.ini:/comp7940-lab/config.ini:ro
+      - ./logs:/comp7940-lab/logs
+      - ./temp:/comp7940-lab/temp
+    networks:
+      - chatbot_network
+    restart: unless-stopped
+
+  # ================================================================ #
+  #  Video Worker – processes image-to-video tasks (10 replicas)     #
+  #  Typical load: 1000 users × ~2% use video at peak = 20 concurrent#
+  #  Most time spent waiting on SiliconFlow API (I/O bound).         #
+  # ================================================================ #
+  video_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python worker.py
+    depends_on:
+      - redis
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - WORKER_TYPE=video
+      - MILVUS_HOST=milvus
+      - MILVUS_PORT=19530
+    volumes:
+      - ./config.ini:/comp7940-lab/config.ini:ro
+      - ./logs:/comp7940-lab/logs
+      - ./temp:/comp7940-lab/temp
+    networks:
+      - chatbot_network
+    restart: unless-stopped
+    deploy:
+      replicas: 10
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+  # ================================================================ #
+  #  OCR Worker – processes document analysis tasks (20 replicas)    #
+  #  Typical load: 1000 users × ~8% upload PDFs at peak = 80 docs   #
+  #  Each task: ~1s PyMuPDF (CPU) + ~3s LLM summary (I/O).          #
+  #  Concurrency=4 allows overlapping LLM waits per container.      #
+  # ================================================================ #
+  ocr_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python worker.py
+    depends_on:
+      - redis
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - WORKER_TYPE=ocr
+      - MILVUS_HOST=milvus
+      - MILVUS_PORT=19530
+    volumes:
+      - ./config.ini:/comp7940-lab/config.ini:ro
+      - ./logs:/comp7940-lab/logs
+      - ./temp:/comp7940-lab/temp
+    networks:
+      - chatbot_network
+    restart: unless-stopped
+    deploy:
+      replicas: 20
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+  # ================================================================ #
+  #  API – FastAdmin admin interface for course data management       #
+  # ================================================================ #
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: chatbot_api
+    command: uvicorn api_server:app --host 0.0.0.0 --port 8000
+    depends_on:
+      - milvus
+    environment:
+      - MILVUS_HOST=milvus
+      - MILVUS_PORT=19530
+      - EMBEDDING_API_KEY=sk-mubvhickdwyfyifhjthqkidqthzdxbvpulkzgyhjhftatqxz
+      - EMBEDDING_BASE_URL=https://api.siliconflow.cn/v1
+      - EMBEDDING_MODEL=BAAI/bge-m3
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./config.ini:/comp7940-lab/config.ini:ro
+    networks:
+      - chatbot_network
+    restart: unless-stopped
+
+networks:
+  chatbot_network:
+    driver: bridge
+
+volumes:
+  redis_data:
+  etcd_data:
+  minio_data:
+  milvus_data:

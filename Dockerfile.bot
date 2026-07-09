@@ -1,0 +1,36 @@
+# Dockerfile for Bot Agent
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first for better caching
+COPY requirements.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Copy application files
+COPY chatbot_agent.py .
+COPY ChatGPT_HKBU.py .
+COPY tasks.py .
+COPY image_to_video.py .
+
+# Create necessary directories
+RUN mkdir -p /app/logs /app/temp
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import sys; sys.exit(0)"
+
+# Run the bot
+CMD ["python", "-u", "chatbot_agent.py"]
