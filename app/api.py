@@ -209,7 +209,7 @@ async def stats():
     unique course codes found in the top results.
     """
     try:
-        from rag.retriever import get_retriever
+        from app.rag.retriever import get_retriever
 
         retriever = get_retriever()
         docs = await retriever.ainvoke("course")
