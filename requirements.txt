@@ -13,6 +13,23 @@ pymupdf>=1.23.0
 celery==5.3.4
 redis==5.0.1
 
+# Web API
+fastapi>=0.100.0
+uvicorn>=0.20.0
+
+# LangGraph AI workflow
+langgraph>=0.3.0
+
+# RAG - Vector store & embeddings
+langchain-milvus>=0.1.0
+langchain-openai>=1.0.0
+langchain-core>=0.1.0
+langchain-text-splitters>=0.1.0
+pymilvus>=2.4.0
+
+# Pydantic settings (loaded from config.ini)
+pydantic-settings>=2.0.0
+
 # Additional dependencies
 Pillow>=10.0.0
 rank_bm25>=0.2.2

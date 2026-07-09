@@ -135,12 +135,8 @@ def get_embeddings():
     The API key falls back to ``CHATGPT_API_KEY`` if ``EMBEDDING_API_KEY`` is not set.
     """
     if not settings.EMBEDDING_API_KEY:
-        logger.warning(
-            "EMBEDDING_API_KEY is empty – falling back to CHATGPT API key. "
-            "Please set EMBEDDING_API_KEY in config.ini or env for production."
-        )
-        api_key = settings.CHATGPT_API_KEY
-        base_url = settings.EMBEDDING_BASE_URL or settings.CHATGPT_BASE_URL
+        api_key = settings.WAN_AI_API_KEY or settings.CHATGPT_API_KEY
+        base_url = settings.EMBEDDING_BASE_URL or settings.WAN_AI_BASE_URL or settings.CHATGPT_BASE_URL
     else:
         api_key = settings.EMBEDDING_API_KEY
         base_url = settings.EMBEDDING_BASE_URL

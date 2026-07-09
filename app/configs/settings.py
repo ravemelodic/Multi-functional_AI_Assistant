@@ -104,6 +104,14 @@ class Settings(BaseSettings):
             kwargs["WAN_AI_BASE_URL"] = ini["WAN_AI"].get("BASE_URL", "")
             kwargs["WAN_AI_MODEL"] = ini["WAN_AI"].get("MODEL", "")
 
+        # Read optional [EMBEDDING] section (if present in config.ini)
+        if ini.has_section("EMBEDDING"):
+            kwargs["EMBEDDING_API_KEY"] = ini["EMBEDDING"].get("API_KEY", "")
+            kwargs["EMBEDDING_BASE_URL"] = ini["EMBEDDING"].get("BASE_URL", "")
+            kwargs["EMBEDDING_MODEL"] = ini["EMBEDDING"].get("MODEL", "text-embedding-3-small")
+            kwargs["EMBEDDING_API_VER"] = ini["EMBEDDING"].get("API_VER", "2024-12-01-preview")
+            kwargs["EMBEDDING_PROVIDER"] = ini["EMBEDDING"].get("PROVIDER", "openai")
+
         # Merge with env-var overrides (env vars win)
         return cls(**kwargs)
 

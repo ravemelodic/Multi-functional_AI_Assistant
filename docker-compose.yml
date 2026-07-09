@@ -115,9 +115,6 @@ services:
       - REDIS_PORT=6379
       - MILVUS_HOST=milvus
       - MILVUS_PORT=19530
-      - EMBEDDING_API_KEY=sk-mubvhickdwyfyifhjthqkidqthzdxbvpulkzgyhjhftatqxz
-      - EMBEDDING_BASE_URL=https://api.siliconflow.cn/v1
-      - EMBEDDING_MODEL=BAAI/bge-m3
     volumes:
       - ./config.ini:/comp7940-lab/config.ini:ro
       - ./logs:/comp7940-lab/logs
@@ -211,9 +208,6 @@ services:
     environment:
       - MILVUS_HOST=milvus
       - MILVUS_PORT=19530
-      - EMBEDDING_API_KEY=sk-mubvhickdwyfyifhjthqkidqthzdxbvpulkzgyhjhftatqxz
-      - EMBEDDING_BASE_URL=https://api.siliconflow.cn/v1
-      - EMBEDDING_MODEL=BAAI/bge-m3
     ports:
       - "8000:8000"
     volumes:
