@@ -701,26 +701,30 @@ User: "1" 或 "smooth zoom" 或 "default"
 ### 5.5 文档分析流
 
 ```
-User: [发送 PDF 文件]
+User: [发送 PDF 文件 + caption "只分析第三章"]
   │
   ├── handle_attachment → _route_document_analysis → Graph
+  │
+  ├── bot.py 捕获 caption → user_message = "[Document: 文件.pdf] 只分析第三章"
   │
   ├── [Graph] analyze_document_node
   │   ├── 下载 PDF 到本地临时文件
   │   ├── Celery: analyze_document_task.apply_async(queue="ocr")
-  │   └── result = task.get(timeout=180)
+  │   ├── result = task.get(timeout=180)
+  │   ├── 异步 ingest_text() 将全文入库 Milvus（fire-and-forget）
+  │   └── 返回 {"rag_context": 全文内容 + 摘要, "rag_empty": False}
   │
-  ├── Celery Tasks:
-  │   ├── pymupdf 提取全文
-  │   ├── ChatGPT 生成摘要
-  │   └── 返回 {success, summary, extracted_text}
+  ├── [Graph] retrieve_memory  （← 汇入对话 pipeline）
+  │   └── Milvus 检索该用户相关对话历史
   │
-  ├── [Graph] 异步 ingest_text() 将 PDF 全文入库 Milvus
-  │   ├── 分块 → embedding → course_documents 集合
-  │   ├── metadata: source=user_upload_pdf, filename, user_id
-  │   └── 后续 RAG 检索可直接命中 PDF 知识
+  ├── [Graph] build_prompt
+  │   ├── rag_context（PDF 全文）+ conversation_memory_context + user_message
+  │   └── "Additional information:\n[Uploaded Document: 文件.pdf]\n..."
   │
-  └── Bot 回复分析结果 + 存入聊天记录
+  ├── [Graph] call_llm → ChatGPT（回答"只分析第三章"的具体问题）
+  ├── [Graph] store_memory → 本轮对话存入 Milvus conversation_memory
+  │
+  └── Bot 回复针对性分析结果（仅第三章内容，而非全文档摘要）
 ```
 
 ---
