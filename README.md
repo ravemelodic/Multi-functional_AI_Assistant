@@ -38,9 +38,9 @@
 |------|----------|------|
 | 🤖 **AI 对话** | LangGraph + ChatGPT | 状态机驱动的多轮对话，意图自动分类 |
 | 🧠 **对话记忆** | Milvus 向量记忆库 | 每次对话自动存入向量库，下次检索注入 prompt，跨会话持久化 |
-| 📚 **课程查询** | Milvus RAG + PostgreSQL | 语义检索+精确匹配双引擎，支持 CSV 数据导入 |
+| 📚 **课程查询** | Milvus Hybrid RAG | 语义检索（课程代码 + 课程名称），支持 CSV/JSON 数据导入与 PDF 自动入库 |
 | 🎬 **图片转视频** | SiliconFlow Wan-AI + Celery | 图片分析 + AI 推荐动画 prompt + 后台生成 |
-| 📄 **文档分析** | PyMuPDF + ChatGPT | PDF 文本提取 + AI 智能摘要 |
+| 📄 **文档分析** | PyMuPDF + ChatGPT + Milvus | PDF 文本提取 + AI 智能摘要 + **自动入库 RAG 知识库** |
 | 🛡️ **高可用保护** | 熔断器 + 重试 + 限流 | LLM 熔断（5次失败切30s）、3次指数退避重试、每用户速率限制、输入校验 |
 | 🖥️ **管理后台** | FastAPI + Web UI | 程序员通过浏览器上传课程数据 |
 
@@ -69,28 +69,28 @@ Bot: 云计算是通过互联网提供计算资源的服务模式...
 
 ### 2. 课程查询
 
-**用法**：发送包含课程代码的消息（格式：4 字母 + 4 数字）
+**用法**：发送课程代码（格式：4 字母 + 4 数字）或课程名称
 
 ```
 你: COMP7940 什么时候上课？
 Bot: COMP7940（AI and Chatbot Development）上课时间是
      周一 14:30-17:15，地点在 DLB 514
 
-你: COMP7940 有什么作业？
-Bot: COMP7940 的作业：
-     - Chatbot Project（截止：2025-04-15）
-       要求：使用 LangGraph 开发一个 Telegram 机器人
-     - Quiz 1（截止：2025-03-01）
-       要求：NLP 和聊天机器人设计基础概念
+你: 这周 Cloud Computing 有什么作业要交？
+Bot: COMP7930（Big Data Analytics）的作业：
+     - Assignment 1（截止：2025-04-20）
+       要求：Docker 部署大数据分析管道
 ```
 
 **特点**：
-- ✅ 自动识别课程代码
+- ✅ 自动识别课程代码（`COMP7940` 格式）
+- ✅ **支持课程名称自然语言查询**（如 "Cloud Computing"、"云计算"）
+- ✅ 语义检索自动匹配最相关课程
 - ✅ 查询上课时间和地点
 - ✅ 查看作业要求和截止日期
 - ✅ 未找到课程时诚实告知，不编造
 
-**数据来源**：管理员通过 Web 管理后台上传 CSV/JSON → 自动存入 Milvus 向量库
+**数据来源**：管理员通过 Web 管理后台上传 CSV/JSON → 自动存入 Milvus 向量库；用户上传的 PDF 文档经 AI 分析后自动入库
 
 ---
 
@@ -181,6 +181,7 @@ Bot: 📝 **文档分析结果**
 - ✅ AI 智能摘要
 - ✅ 识别关键信息（截止日期、要求等）
 - ✅ 快速理解文档内容
+- ✅ **内容自动入库 Milvus RAG 知识库**：后续可通过语义检索直接查询 PDF 中的知识，无需重复上传
 
 **注意**：
 - ⚠️ 仅支持 PDF 格式
@@ -324,8 +325,8 @@ Telegram 用户                    管理员浏览器
 │  classify_intent                               │
 │    ├── video_command     → 视频工作流          │
 │    ├── retrieve_course   → Milvus Hybrid RAG   │
-│    ├── analyze_document  → Celery OCR Worker   │
-│    └── general_chat      → ChatGPT + 记忆       │
+│    ├── general_chat      → Milvus Hybrid RAG   │
+│    └── analyze_document  → Celery OCR + 入库   │
 └───────────────┬───────────────────────────────┘
                 │
          ┌──────┴──────┐
@@ -368,7 +369,7 @@ Telegram 用户                    管理员浏览器
 |------|------|
 | **状态驱动** | 所有业务逻辑由 LangGraph StateGraph 编排，AgentState 传递完整上下文 |
 | **异步非阻塞** | 全链路 async/await，单进程高并发 |
-| **混合检索** | BM25 稀疏匹配 + Milvus 稠密向量 RRF 融合，双引擎 |
+| **混合检索** | BM25 稀疏匹配 + Milvus 稠密向量 RRF 融合 |
 | **阈值安全** | RAG 相似度 < 0.5 时如实告知，不编造课程信息 |
 | **熔断保护** | LLM 连续 5 次失败开启熔断器，30s 后自愈，防止雪崩 |
 | **速率限制** | 每用户 30 次/分钟滑动窗口 + 全局 50 并发节流，防滥用 |
@@ -396,7 +397,7 @@ Multi-functional_AI_Assistant/
 │   ├── graph/
 │   │   ├── __init__.py
 │   │   ├── state.py                 # AgentState 类型定义
-│   │   ├── nodes.py                 # LangGraph 节点函数（10 个节点）
+│   │   ├── nodes.py                 # LangGraph 节点函数（11 个节点）
 │   │   └── workflow.py              # StateGraph 构建与编译
 │   │
 │   ├── rag/
@@ -551,6 +552,9 @@ A: 是的。每次对话都会自动存入 Milvus 向量库的 `conversation_mem
 
 **Q: 为什么我查询不存在的课程时，机器人会说"不知道"？**
 A: 这是正常的安全设计。当 RAG 检索结果低于相似度阈值（0.5）时，系统会告知 LLM "没有找到相关信息，不要编造"，避免张冠李戴。
+
+**Q: 支持用课程名称查询吗？**
+A: 支持。现在你直接输入课程名称（如 "Cloud Computing"、"云计算"），系统会自动进行语义检索，命中 Milvus 中的课程信息并返回相关结果。也支持用课程代码（如 COMP7940）查询。
 
 **Q: 机器人有速率限制吗？会被滥用吗？**
 A: 有。系统内置了多层防护：每用户每分钟最多 30 条消息（滑动窗口），全局最多 50 个并发请求，单条消息最长 4096 字符。此外还有 LLM 熔断保护：如果 AI 接口连续 5 次失败，会自动切断 30 秒防止雪崩。

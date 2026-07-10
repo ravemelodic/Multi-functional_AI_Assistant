@@ -61,13 +61,13 @@
 │  │  │       │                     │          │                      │  │        │
 │  │  │       │                     └────┬──────┘                     │  │        │
 │  │  │       │                          ▼                            │  │        │
-│  │  │       ├── general_chat ────▶ build_prompt                    │  │        │
+│  │  │       ├── general_chat ──▶ retrieve_rag ──▶ build_prompt                    │  │        │
 │  │  │       │                          │                            │  │        │
 │  │  │       │                          ▼                            │  │        │
 │  │  │       │                     call_llm (ChatGPT)                │  │        │
 │  │  │       │                          │                            │  │        │
 │  │  │       │                          ▼                            │  │        │
-│  │  │       │                     log_to_db (PostgreSQL)            │  │        │
+│  │  │       │                     store_memory (Milvus)            │  │        │
 │  │  │       │                          │                            │  │        │
 │  │  │       │                          ▼                            │  │        │
 │  │  │       │                          END                          │  │        │
@@ -85,7 +85,7 @@
 │  ┌─ course_docs   │    │  ┌─ task queue     │
 │  ├─ conv_memory   │    │  ├─ result store   │
 │  │  (embedding:   │    │  └─ session cache  │
-│  │   BAAI/bge-m3) │    │                    │
+│  │   text-embedding-3-small) │    │                    │
 │  └────────────────┘    └────────────────────┘
 └──────────────────┘    └────────────────────┘    └──────────────────────┘
 
@@ -106,11 +106,11 @@
 
 | 原则 | 说明 |
 |------|------|
-| **状态驱动** | 所有业务逻辑由 LangGraph StateGraph 编排，通过 AgentState 传递上下文 |
+| **统一 RAG 入口** | 无论课程代码还是自然语言查询，均先经过 Milvus Hybrid RAG 语义检索 |
 | **异步非阻塞** | 全链路异步（`async/await`），单进程即可处理大量并发对话 |
 | **混合检索** | 课程查询：BM25 稀疏匹配 + Milvus 稠密向量，RRF 融合双引擎 |
 | **对话记忆** | 每次对话自动存入 Milvus `conversation_memory` 集合，按 user_id 隔离；下次提问时语义检索历史并注入 prompt |
-| **零数据库依赖** | 课程数据 + 对话记忆全部托管在 Milvus，无需 PostgreSQL |
+| **全量 Milvus** | 课程数据 + 对话记忆 + 用户 PDF 全部托管在 Milvus，无外部数据库依赖 |
 | **阈值安全** | RAG 结果低于相似度阈值（0.5）时，LLM 如实回复"未找到"而非编造 |
 | **松耦合** | 各组件通过消息队列/API 通信，可独立扩缩容 |
 
@@ -309,7 +309,7 @@ class AgentState(TypedDict):
     "receive_video_prompt": "receive_video_prompt",  # → 生成视频 → END
     "retrieve_course":      "retrieve_course",        # → DB 查询 → RAG → memory → ...
     "analyze_document":     "analyze_document",       # → PDF 分析 → END
-    "general_chat":         "retrieve_memory",         # → 检索记忆 → LLM → 存入记忆
+    "general_chat":         "retrieve_rag",           # → RAG 检索 → 记忆 → LLM → 存入记忆
 }
 ```
 
@@ -321,8 +321,8 @@ class AgentState(TypedDict):
 1. user_data.get("waiting_for_video_prompt")  → receive_video_prompt
 2. user_data.get("waiting_for_video_image")   → receive_video_image
 3. msg.startswith("/video")                    → video_command
-4. re.search(r"[A-Z]{4}\d{4}", msg)            → retrieve_course
-5. 默认                                          → general_chat
+4. re.search(r"[A-Z]{4}\d{4}", msg)            → retrieve_course (课程代码)
+5. 默认                                          → general_chat (含纯语义 RAG 检索课程名称)
 ```
 
 ---
@@ -378,24 +378,20 @@ class AgentState(TypedDict):
 ### 4.2 检索流程
 
 ```
-用户问："COMP7940 有什么作业？"
+用户问："COMP7940 有什么作业？" / "Cloud Computing 什么时候上课？"
          │
          ▼
 ┌─────────────────────┐
-│  PostgreSQL 精确查询 │  ← 优先
-│  WHERE course_code  │
-│  = 'COMP7940'       │
-└──────────┬──────────┘
-           │
-     ┌─────┴─────┐
-     │ 有结果？   │
-     └─────┬─────┘
-       是／ │ ＼ 否
-           │     │
-           │     ▼
-           │  ┌─────────────────┐
-           │  │ Milvus 语义检索  │  ← 兜底
-           │  │ top-5 candidates│
+│  ┌─────────────────────────┐
+│  │  Milvus Hybrid RAG 检索  │  ← 统一入口
+│  │  语义搜索 course_name +   │
+│  │  BM25 精确匹配 course_code│
+│  └──────────┬──────────────┘
+│             │
+│       ┌─────┴─────┐
+│       │  score ≥  │
+│       │  0.5 ?    │
+│       └─────┬─────┘
            │  └────────┬────────┘
            │           │
            │     ┌─────┴─────┐
@@ -592,11 +588,15 @@ User: "Explain cloud computing concepts"
   │   └── await langgraph_app.ainvoke(state)
   │
   ├── [Graph] classify_intent → "general_chat"
+  ├── [Graph] retrieve_rag  (-- 新增：所有对话先过 RAG)
+  │   ├── Milvus course_documents 集合语义检索
+  │   ├── 命中课程 → rag_context 注入 prompt
+  │   └── 未命中 → rag_context 为空
   ├── [Graph] retrieve_memory
   │   ├── Milvus conversation_memory 集合语义检索（user_id 过滤）
   │   ├── 找到相关历史 → conversation_memory_context
   │   └──（第一次对话/无相关 → 空字符串）
-  ├── [Graph] build_prompt → "[记忆上下文]...Student Question: Explain..."
+  ├── [Graph] build_prompt → "[RAG上下文][记忆上下文]...Student Question: Explain..."
   ├── [Graph] call_llm → ChatGPT API → response
   ├── [Graph] store_memory
   │   ├── 将本轮对话嵌入向量
@@ -712,9 +712,14 @@ User: [发送 PDF 文件]
   │   └── result = task.get(timeout=180)
   │
   ├── Celery Tasks:
-  │   ├── pymupdf 提取全文 + RAG 分块摘要
+  │   ├── pymupdf 提取全文
   │   ├── ChatGPT 生成摘要
-  │   └── 返回 {success, summary}
+  │   └── 返回 {success, summary, extracted_text}
+  │
+  ├── [Graph] 异步 ingest_text() 将 PDF 全文入库 Milvus
+  │   ├── 分块 → embedding → course_documents 集合
+  │   ├── metadata: source=user_upload_pdf, filename, user_id
+  │   └── 后续 RAG 检索可直接命中 PDF 知识
   │
   └── Bot 回复分析结果 + 存入聊天记录
 ```

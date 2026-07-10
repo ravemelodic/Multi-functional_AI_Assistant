@@ -96,7 +96,7 @@ def build_graph() -> StateGraph:
             "receive_video_prompt": "receive_video_prompt",
             "retrieve_course": "retrieve_rag",
             "analyze_document": "analyze_document",
-            "general_chat": "retrieve_memory",
+            "general_chat": "retrieve_rag",
         },
     )
 

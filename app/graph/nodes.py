@@ -565,6 +565,27 @@ async def analyze_document_node(state: AgentState) -> dict[str, Any]:
 
         if result["success"]:
             summary = result["summary"]
+            extracted_text = result.get("extracted_text", "")
+
+            # Fire-and-forget: persist extracted text to Milvus for RAG retrieval
+            if extracted_text.strip():
+                try:
+                    from rag.ingest_documents import ingest_text
+
+                    pdf_metadata = {
+                        "source": "user_upload_pdf",
+                        "filename": file_name,
+                        "user_id": state["user_id"],
+                    }
+                    asyncio.create_task(
+                        ingest_text(extracted_text, metadata=pdf_metadata)
+                    )
+                    logger.info(
+                        "PDF queued for Milvus ingestion: %s (%d chars)",
+                        file_name, len(extracted_text),
+                    )
+                except Exception as ingest_err:
+                    logger.warning("Failed to queue PDF ingestion: %s", ingest_err)
 
             return {
                 "final_response": (

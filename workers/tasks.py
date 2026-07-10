@@ -231,6 +231,7 @@ def analyze_document_task(self, file_path, file_type, user_id):
         return {
             'success': True,
             'summary': summary,
+            'extracted_text': extracted_text,
             'user_id': user_id
         }
         
