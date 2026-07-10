@@ -342,9 +342,17 @@ async def _route_document_analysis(
         "This may take a moment..."
     )
 
+    # Capture user's caption (e.g. "只分析第三章") as the query
+    user_caption = (update.message.caption or "").strip()
+    user_query = (
+        user_caption
+        if user_caption
+        else f"请分析这份文档 {file_name}，提取关键信息、截止日期和要求"
+    )
+
     initial_state: AgentState = {
         "user_id": update.effective_user.id,
-        "user_message": f"[Document]: {file_name}",
+        "user_message": f"[Document: {file_name}] {user_query}",
         "intent": "analyze_document",
         "course_code": None,
         "db_context": "",

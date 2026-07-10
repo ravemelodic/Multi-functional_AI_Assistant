@@ -197,14 +197,13 @@ def build_prompt_node(state: AgentState) -> dict[str, Any]:
 
     parts = []
     if rag_ctx:
-        parts.append(f"Additional course information:\n{rag_ctx}")
+        parts.append(f"Additional information:\n{rag_ctx}")
     elif rag_empty:
         parts.append(
-            "Note: No relevant course information was found. "
-            "If the student is asking about a specific course you don't have "
-            "information about, tell them honestly that you don't have data on "
-            "that course. Do NOT make up course details or assign information "
-            "from a different course to the one they asked about."
+            "Note: No relevant additional information was found in the knowledge base. "
+            "If the student is asking about a specific course or document you don't have "
+            "data on, tell them honestly that you don't have that information. "
+            "Do NOT make up details or assign information from a different source."
         )
     if mem_ctx:
         parts.append(
@@ -228,6 +227,11 @@ async def call_llm_node(state: AgentState) -> dict[str, Any]:
     global gpt_client
     if gpt_client is None:
         return {"final_response": "Error: ChatGPT client not initialised."}
+
+    # If a previous node already set final_response (e.g. validation error),
+    # skip the LLM call to preserve that response.
+    if state.get("final_response"):
+        return {}
 
     prompt = state.get("augmented_prompt") or state["user_message"]
     try:
@@ -587,11 +591,19 @@ async def analyze_document_node(state: AgentState) -> dict[str, Any]:
                 except Exception as ingest_err:
                     logger.warning("Failed to queue PDF ingestion: %s", ingest_err)
 
+            # Inject document content as rag_context so the conversation
+            # pipeline (retrieve_memory → build_prompt → call_llm) can
+            # answer the user's specific query in the same turn.
+            rag_ctx = (
+                f"[Uploaded Document: {file_name}]\n"
+                f"--- BEGIN DOCUMENT CONTENT ---\n"
+                f"{extracted_text}\n"
+                f"--- END DOCUMENT CONTENT ---\n"
+                f"AI Summary:\n{summary}"
+            )
             return {
-                "final_response": (
-                    f"Document Analysis Result\n\n"
-                    f"File: {file_name}\n\n{summary}"
-                )
+                "rag_context": rag_ctx,
+                "rag_empty": False,
             }
         else:
             return {

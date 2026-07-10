@@ -120,8 +120,8 @@ def build_graph() -> StateGraph:
     workflow.add_edge("call_llm", "store_memory")
     workflow.add_edge("store_memory", END)
 
-    # Document analysis → end
-    workflow.add_edge("analyze_document", END)
+    # Document analysis → memory retrieval → LLM (same pipeline as general chat)
+    workflow.add_edge("analyze_document", "retrieve_memory")
 
     # ------------------------------------------------------------------ #
     #  Compile                                                           #
