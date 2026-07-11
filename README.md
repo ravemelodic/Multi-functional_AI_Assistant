@@ -327,7 +327,7 @@ Telegram 用户                    管理员浏览器
 │    ├── retrieve_course   → Milvus Hybrid RAG   │
 │    ├── general_chat      → Milvus Hybrid RAG   │
 │    └── analyze_document  → Celery OCR + 入库   │
-│                           → 对话 pipeline      │
+│                           → RAG (skip 记忆)    │
 └───────────────┬───────────────────────────────┘
                 │
          ┌──────┴──────┐
