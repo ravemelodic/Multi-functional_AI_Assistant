@@ -75,7 +75,7 @@
 │  │                             ▼                                      │  │
 │  │                            END                                     │  │
 │  │                                                                      │  │
-│  │  另: analyze_document → Celery OCR + 异步入库 Milvus → END          │  │
+│  │  另: analyze_document → Celery OCR + await 入库 → retrieve_rag → LLM (skip_memory)          │  │
 │  │      receive_video_image/prompt → Celery 视频生成 → END             │  │
 │  └──────────────────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -722,7 +722,7 @@ User: [发送 PDF 文件 + caption "只分析第三章"]
   │   ├── 命中刚入库的 PDF chunks（top-5）
   │   └── rag_context = 相关块内容
   │
-  ├── [Graph] retrieve_memory（对话历史）
+  ├── [Graph] retrieve_memory（skip_memory=True → 跳过）
   ├── [Graph] build_prompt
   │   ├── rag_context（PDF Top-5 相关块）+ conversation_memory_context + user_message
   │   └── "Additional information:\n[C 第三章讲...]\n..."

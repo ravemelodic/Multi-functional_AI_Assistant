@@ -107,6 +107,10 @@ async def retrieve_conversation_memory_node(state: AgentState) -> dict[str, Any]
     Returns the formatted memories as ``conversation_memory_context``
     (or empty string if nothing found / Milvus unavailable).
     """
+    # analyze_document path skips memory to avoid interference
+    if state.get("skip_memory"):
+        return {"conversation_memory_context": ""}
+
     user_msg = state.get("user_message", "")
     user_id = state.get("user_id", 0)
 
@@ -596,6 +600,7 @@ async def analyze_document_node(state: AgentState) -> dict[str, Any]:
 
             return {
                 "user_message": clean_msg,
+                "skip_memory": True,
             }
         else:
             return {
