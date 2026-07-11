@@ -112,6 +112,11 @@ class Settings(BaseSettings):
             kwargs["EMBEDDING_API_VER"] = ini["EMBEDDING"].get("API_VER", "2024-12-01-preview")
             kwargs["EMBEDDING_PROVIDER"] = ini["EMBEDDING"].get("PROVIDER", "openai")
 
+        # Read optional [APP] section for misc paths
+        if ini.has_section("APP"):
+            kwargs["TEMP_DIR"] = ini["APP"].get("TEMP_DIR", "/comp7940-lab/temp")
+            kwargs["LOG_DIR"] = ini["APP"].get("LOG_DIR", "/comp7940-lab/logs")
+
         # Merge with env-var overrides (env vars win)
         return cls(**kwargs)
 

@@ -129,6 +129,7 @@ async def retrieve_conversation_memory_node(state: AgentState) -> dict[str, Any]
     # Format the top memories into a readable block
     lines = ["Relevant conversation history (from oldest to most recent):"]
     # Reverse so older memories appear first (chronological feel)
+    # 为了增进LLM对上下文的理解，按相关性得分排列对话记忆，大部分时候越晚的记忆与当前对话内容相关性越强越，这导致越早的记忆越靠前，越晚的记忆越靠后
     docs_scores.reverse()
     for doc, score in docs_scores:
         lines.append(f"--- (relevance: {score:.2f})")
@@ -442,7 +443,7 @@ async def receive_video_prompt_node(state: AgentState) -> dict[str, Any]:
     else:
         user_prompt = user_input
 
-    output_video = f"/comp7940-lab/temp/output_video_{state['user_id']}.mp4"
+    output_video = f"{settings.TEMP_DIR}/output_video_{state['user_id']}.mp4"
 
     # Submit Celery task ---------------------------------------------------
     from workers.tasks import generate_video_task
@@ -535,7 +536,9 @@ async def _monitor_video_task(update, ctx, task, output_video, user_prompt):
 
 async def analyze_document_node(state: AgentState) -> dict[str, Any]:
     """Process a PDF upload via Celery OCR worker."""
+    # update用于获取文件实体流
     update = state.get("_raw_update")
+    # ctx用于获取user_data-视频工作流持久化和bot对象，bot对象用于发送消息给用户
     ctx = state.get("_raw_context")
     if not update or not ctx:
         return {"error": "No Telegram update/context in state"}
@@ -554,7 +557,7 @@ async def analyze_document_node(state: AgentState) -> dict[str, Any]:
             )
         }
 
-    temp_path = f"/comp7940-lab/temp/doc_{state['user_id']}_{file.file_unique_id}.pdf"
+    temp_path = f"{settings.TEMP_DIR}/doc_{state['user_id']}_{file.file_unique_id}.pdf"
     try:
         telegram_file = await file.get_file()
         await telegram_file.download_to_drive(temp_path)
