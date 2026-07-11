@@ -536,9 +536,7 @@ async def _monitor_video_task(update, ctx, task, output_video, user_prompt):
 
 async def analyze_document_node(state: AgentState) -> dict[str, Any]:
     """Process a PDF upload via Celery OCR worker."""
-    # update用于获取文件实体流
     update = state.get("_raw_update")
-    # ctx用于获取user_data-视频工作流持久化和bot对象，bot对象用于发送消息给用户
     ctx = state.get("_raw_context")
     if not update or not ctx:
         return {"error": "No Telegram update/context in state"}
@@ -571,10 +569,9 @@ async def analyze_document_node(state: AgentState) -> dict[str, Any]:
         result = task.get(timeout=180)
 
         if result["success"]:
-            summary = result["summary"]
             extracted_text = result.get("extracted_text", "")
 
-            # Fire-and-forget: persist extracted text to Milvus for RAG retrieval
+            # Persist to Milvus and wait — retrieve_rag needs it immediately
             if extracted_text.strip():
                 try:
                     from rag.ingest_documents import ingest_text
@@ -584,29 +581,21 @@ async def analyze_document_node(state: AgentState) -> dict[str, Any]:
                         "filename": file_name,
                         "user_id": state["user_id"],
                     }
-                    asyncio.create_task(
-                        ingest_text(extracted_text, metadata=pdf_metadata)
-                    )
+                    await ingest_text(extracted_text, metadata=pdf_metadata)
                     logger.info(
-                        "PDF queued for Milvus ingestion: %s (%d chars)",
+                        "PDF ingested to Milvus: %s (%d chars)",
                         file_name, len(extracted_text),
                     )
                 except Exception as ingest_err:
-                    logger.warning("Failed to queue PDF ingestion: %s", ingest_err)
+                    logger.warning("Failed to ingest PDF to Milvus: %s", ingest_err)
 
-            # Inject document content as rag_context so the conversation
-            # pipeline (retrieve_memory → build_prompt → call_llm) can
-            # answer the user's specific query in the same turn.
-            rag_ctx = (
-                f"[Uploaded Document: {file_name}]\n"
-                f"--- BEGIN DOCUMENT CONTENT ---\n"
-                f"{extracted_text}\n"
-                f"--- END DOCUMENT CONTENT ---\n"
-                f"AI Summary:\n{summary}"
-            )
+            # Strip the [Document: ...] prefix so retrieve_rag searches
+            # only the user's actual query (e.g. "只分析第三章")
+            import re
+            clean_msg = re.sub(r'^\[Document:[^\]]*\]\s*', '', state.get("user_message", ""))
+
             return {
-                "rag_context": rag_ctx,
-                "rag_empty": False,
+                "user_message": clean_msg,
             }
         else:
             return {

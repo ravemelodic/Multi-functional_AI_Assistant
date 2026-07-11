@@ -105,23 +105,33 @@ def build_graph() -> StateGraph:
     # ------------------------------------------------------------------ #
 
     # Video command and image prompt branches → end after single node
+    # 由于用户每一次与AI对话的交互（发送图片，图片解析，选择prompt,生成视频每一个都属于不同的对话轮次-一次Q&A属于一轮），因此其每一个节点独立且都指向END
     workflow.add_edge("video_command", END)
     workflow.add_edge("receive_video_image", END)
     workflow.add_edge("receive_video_prompt", END)
 
     # Course pipeline: retrieve_rag → retrieve_memory
+    # retrieve rag 用于处理课程相关的检索
+    # retrieve rag 执行了完整的课程相关的混合检索流程
+    # retrieve rag 返回的是rag_context
     workflow.add_edge("retrieve_rag", "retrieve_memory")
 
     # Memory retrieval feeds into prompt builder (for both general & course paths)
+    # 其通过从以往的conversation_memory集合（Milvus）中检索出与当前用户输入相关的历史对话写入conversation_memory_context，来为后续的prompt构建提供上下文信息
     workflow.add_edge("retrieve_memory", "build_prompt")
 
     # Conversation pipeline: build_prompt → call_llm → store_memory
+    # build prompt 用于构建最终的prompt，返回的是final_prompt
+    # call llm 用于调用llm生成最终的response，返回的是llm_response
+    # store_memory 把 (user_message + final_response) embed 后写入 conversation_memory 集合，不走 conversation_memory_context，也不走 RAG 混合索引。
     workflow.add_edge("build_prompt", "call_llm")
     workflow.add_edge("call_llm", "store_memory")
     workflow.add_edge("store_memory", END)
 
     # Document analysis → memory retrieval → LLM (same pipeline as general chat)
-    workflow.add_edge("analyze_document", "retrieve_memory")
+    # analyze document 用于分析用户上传的文档，文档与摘要会被写入rag_context(与retrieve_rag的rag_context是同一个共享变量，但是不会冲突，因为它们不可能在同一轮对话同时执行)
+    # Document analysis → RAG (PDF is already in Milvus after await ingest_text)
+    workflow.add_edge("analyze_document", "retrieve_rag")
 
     # ------------------------------------------------------------------ #
     #  Compile                                                           #

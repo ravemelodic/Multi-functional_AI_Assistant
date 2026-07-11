@@ -131,129 +131,58 @@ def generate_video_task(self, image_base64, prompt, user_id, output_path):
 )
 def analyze_document_task(self, file_path, file_type, user_id):
     """
-    Task to analyze document (PDF or image) with OCR
-    
+    Extract raw text from a PDF document via PyMuPDF.
+
+    Returns only the extracted text --- no AI summary is generated.
+    The downstream retrieve_rag node handles chunking + RAG retrieval.
+
     Args:
         file_path: Path to the document file
         file_type: Type of file ('pdf' or 'image')
         user_id: Telegram user ID
-    
+
     Returns:
-        dict: Result with extracted text and summary
+        dict: Result with extracted_text
     """
-    logger.info(f"Starting document analysis task for user {user_id}")
-    
+    logger.info("Starting document extraction task for user %d", user_id)
+
     try:
         import fitz  # PyMuPDF
-        
-        # Load config
-        config = configparser.ConfigParser()
-        config.read('config.ini')
-        
+
         extracted_text = ""
-        
-        # Update task state
+
         self.update_state(state='PROGRESS', meta={'status': 'extracting_text'})
-        
-        # Extract text based on file type
+
         if file_type == 'pdf':
             doc = fitz.open(file_path)
-            # Extract ALL pages (not just first 5) so the summary is complete
             for page in doc:
                 extracted_text += page.get_text()
             doc.close()
-        else:  # image
-            # Without EasyOCR, we can't process images
+        else:
             return {
                 'success': False,
                 'error': 'Image OCR not available (EasyOCR not installed)',
-                'user_id': user_id
+                'user_id': user_id,
             }
-        
-        # Update task state
-        self.update_state(state='PROGRESS', meta={'status': 'generating_summary'})
-        
-        # Generate summary with ChatGPT
-        if len(extracted_text.strip()) > 50:
-            gpt = ChatGPT(config)
 
-            # For documents exceeding token limits, chunk and recursively summarise
-            # using the same RecursiveCharacterTextSplitter strategy as RAG
-            if len(extracted_text) > 8000:
-                from langchain_text_splitters import RecursiveCharacterTextSplitter
+        logger.info(
+            "Document extraction completed for user %d (%d chars)",
+            user_id, len(extracted_text),
+        )
 
-                splitter = RecursiveCharacterTextSplitter(
-                    chunk_size=3000,
-                    chunk_overlap=200,
-                    separators=["\n\n", "\n", ". ", " "],
-                )
-                chunks = splitter.split_text(extracted_text)
-
-                # First pass: summarise each chunk independently
-                chunk_summaries = []
-                for i, chunk in enumerate(chunks):
-                    chunk_prompt = (
-                        f"You are a professional academic assistant. "
-                        f"Summarise the following excerpt from an educational document "
-                        f"(part {i+1}/{len(chunks)}). Capture key points, deadlines, and requirements.\n\n"
-                        f"Excerpt:\n{chunk}"
-                    )
-                    chunk_summary = gpt.submit_sync(chunk_prompt, max_tokens=300)
-                    chunk_summaries.append(chunk_summary)
-
-                # Second pass: synthesise the per-chunk summaries into one
-                combined = "\n\n".join(chunk_summaries)
-                synthesis_prompt = (
-                    f"Below are summaries of different sections of an educational document. "
-                    f"Synthesize them into one coherent summary covering:\n"
-                    f"1. Core Course Objectives\n"
-                    f"2. Key Deadlines/Tasks\n"
-                    f"3. Important Requirements/Knowledge Points\n\n"
-                    f"Summaries:\n{combined}"
-                )
-                summary = gpt.submit_sync(synthesis_prompt, max_tokens=500)
-            else:
-                # Short document: summarise directly
-                prompt = (
-                    f"You are a professional academic assistant. Summarise the following "
-                    f"educational document covering:\n"
-                    f"1. Core Course Objectives\n"
-                    f"2. Key Deadlines/Tasks\n"
-                    f"3. Important Requirements/Knowledge Points\n\n"
-                    f"Content:\n{extracted_text}"
-                )
-                summary = gpt.submit_sync(prompt, max_tokens=500)
-        else:
-            summary = "Could not extract enough text from the document."
-        
-        logger.info(f"Document analysis completed for user {user_id}")
-        
         return {
             'success': True,
-            'summary': summary,
             'extracted_text': extracted_text,
-            'user_id': user_id
+            'user_id': user_id,
         }
-        
+
     except Exception as e:
-        logger.error(f"Document analysis error for user {user_id}: {str(e)}")
+        logger.error("Document extraction error for user %d: %s", user_id, e)
         return {
             'success': False,
             'error': str(e),
-            'user_id': user_id
-        }
-
-
-@celery_app.task(
-    name='tasks.analyze_image',
-    bind=True,
-    autoretry_for=(Exception,),
-    max_retries=3,
-    retry_backoff=True,
-    retry_backoff_max=60,
-    retry_jitter=True,
-)
-def analyze_image_task(self, image_base64, user_id):
+            'user_id': user_id,
+        }def analyze_image_task(self, image_base64, user_id):
     """
     Task to analyze image with GPT and suggest video prompts
     

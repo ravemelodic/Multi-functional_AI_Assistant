@@ -710,21 +710,27 @@ User: [发送 PDF 文件 + caption "只分析第三章"]
   ├── [Graph] analyze_document_node
   │   ├── 下载 PDF 到本地临时文件
   │   ├── Celery: analyze_document_task.apply_async(queue="ocr")
+  │   │   └── PyMuPDF 提取全文（无 AI 摘要）
   │   ├── result = task.get(timeout=180)
-  │   ├── 异步 ingest_text() 将全文入库 Milvus（fire-and-forget）
-  │   └── 返回 {"rag_context": 全文内容 + 摘要, "rag_empty": False}
+  │   ├── await ingest_text() 全文分块入库（同步等待）
+  │   ├── 清理 user_message（去掉 [Document: ...] 前缀）
+  │   └── 返回 {"user_message": "只分析第三章"}（不设 rag_context）
   │
-  ├── [Graph] retrieve_memory  （← 汇入对话 pipeline）
-  │   └── Milvus 检索该用户相关对话历史
+  ├── [Graph] retrieve_rag  （← 由 rerieve_rag 进行 RAG）
+  │   ├── query = "只分析第三章"
+  │   ├── Milvus course_documents 混合检索
+  │   ├── 命中刚入库的 PDF chunks（top-5）
+  │   └── rag_context = 相关块内容
   │
+  ├── [Graph] retrieve_memory（对话历史）
   ├── [Graph] build_prompt
-  │   ├── rag_context（PDF 全文）+ conversation_memory_context + user_message
-  │   └── "Additional information:\n[Uploaded Document: 文件.pdf]\n..."
+  │   ├── rag_context（PDF Top-5 相关块）+ conversation_memory_context + user_message
+  │   └── "Additional information:\n[C 第三章讲...]\n..."
   │
-  ├── [Graph] call_llm → ChatGPT（回答"只分析第三章"的具体问题）
+  ├── [Graph] call_llm → ChatGPT（回答"只分析第三章"）
   ├── [Graph] store_memory → 本轮对话存入 Milvus conversation_memory
   │
-  └── Bot 回复针对性分析结果（仅第三章内容，而非全文档摘要）
+  └── Bot 回复针对性分析结果
 ```
 
 ---
