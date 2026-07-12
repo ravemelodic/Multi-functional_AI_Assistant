@@ -85,6 +85,10 @@ class AgentState(TypedDict):
     # Celery result
     celery_result: Optional[dict]
 
+    # Queue fields — used when messages are processed asynchronously via Redis
+    chat_id: Optional[int]           # Telegram chat ID, for sending the response
+    reply_message_id: Optional[int]  # "Thinking..." message ID to edit
+
     # Raw Telegram objects (for nodes that need to send messages directly)
     _raw_update: Any
     _raw_context: Any

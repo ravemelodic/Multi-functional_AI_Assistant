@@ -13,12 +13,14 @@ Includes production hardening:
 
 import io
 import base64
+import json
 import logging
 import os
 import asyncio
 import time
 from collections import defaultdict
 from collections import deque
+import redis.asyncio
 
 from telegram import Update
 from telegram.ext import (
@@ -97,6 +99,12 @@ class RateLimiter:
 
 # Module-level rate limiter instance
 rate_limiter = RateLimiter(max_requests=30, window_seconds=60)
+
+# Redis queue for conversation processing
+QUEUE_KEY = "conversation_queue"
+_redis_client: redis.asyncio.Redis | None = None
+_queue_consumer_started = False
+_queue_semaphore = asyncio.Semaphore(20)  # max 20 concurrent queue consumers
 
 # =================================================================== #
 #  Input validation                                                   #
@@ -388,6 +396,194 @@ async def _route_document_analysis(
 # =================================================================== #
 #  UTILITY: sync LangGraph result back into Telegram user_data         #
 # =================================================================== #
+
+# =================================================================== #
+#  SYNC PATH — runs the graph directly (video workflow)               #
+# =================================================================== #
+
+async def _run_sync(
+    state: AgentState, update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int,
+) -> None:
+    """Execute the graph synchronously (for video workflow that needs raw Telegram objects)."""
+    loading_msg = await update.message.reply_text("Thinking...")
+    try:
+        async with _graph_semaphore:
+            result = await asyncio.wait_for(
+                langgraph_app.ainvoke(state),
+                timeout=30.0,
+            )
+    except asyncio.TimeoutError:
+        logger.warning("Graph invocation timed out for user %d", user_id)
+        await loading_msg.edit_text(
+            "Sorry, the request timed out. The AI service may be "
+            "experiencing high traffic. Please try again in a moment."
+        )
+        return
+    except Exception as exc:
+        logger.exception("Graph invocation failed for user %d", user_id)
+        await loading_msg.edit_text(f"Sorry, something went wrong: {exc}")
+        return
+
+    _sync_user_data(context, result)
+    response = result.get("final_response")
+    if response:
+        if len(response) > 4096:
+            response = response[:4093] + "..."
+        try:
+            await loading_msg.edit_text(response)
+        except Exception:
+            pass
+    else:
+        await loading_msg.edit_text("I received your message but have nothing to say yet.")
+
+
+# =================================================================== #
+#  QUEUE PATH — enqueue for async processing (削峰填谷)                #
+# =================================================================== #
+
+async def _enqueue_message(
+    state: AgentState, update: Update, user_id: int,
+) -> None:
+    """Push the message to Redis queue and reply immediately with a placeholder."""
+    loading_msg = await update.message.reply_text("Thinking...")
+
+    # Build a JSON-serialisable copy (strip raw Telegram objects)
+    queue_state = {}
+    for k, v in state.items():
+        if k in ("_raw_update", "_raw_context"):
+            continue
+        # Convert non-serialisable types to str
+        try:
+            json.dumps(v)
+            queue_state[k] = v
+        except (TypeError, ValueError):
+            queue_state[k] = str(v)
+
+    queue_state["chat_id"] = update.effective_chat.id
+    queue_state["reply_message_id"] = loading_msg.message_id
+
+    try:
+        if _redis_client is not None:
+            await _redis_client.rpush(QUEUE_KEY, json.dumps(queue_state, ensure_ascii=False))
+            logger.debug("Enqueued message for user %d", user_id)
+        else:
+            logger.warning("Redis unavailable, falling back to sync for user %d", user_id)
+            await _run_sync(state, update, None, user_id)  # type: ignore
+    except Exception as exc:
+        logger.warning("Redis enqueue failed for user %d, fallback to sync: %s", user_id, exc)
+        await _run_sync(state, update, None, user_id)  # type: ignore
+
+
+# =================================================================== #
+#  QUEUE CONSUMER — background worker that processes queued messages   #
+# =================================================================== #
+
+async def conversation_queue_consumer(bot_instance) -> None:
+    """
+    Background asyncio task: consumes messages from Redis queue,
+    runs LangGraph, and sends the response back to the user.
+    """
+    global _queue_consumer_started
+    if _queue_consumer_started:
+        return
+    _queue_consumer_started = True
+
+    logger.info("Queue consumer started (channel=%s)", QUEUE_KEY)
+
+    while True:
+        try:
+            if _redis_client is None:
+                await asyncio.sleep(1)
+                continue
+
+            _, data = await _redis_client.blpop(QUEUE_KEY, timeout=30)
+            if not data:
+                continue
+
+            state = json.loads(data)
+            user_id = state.get("user_id", "?")
+
+            async with _queue_semaphore:
+                try:
+                    result = await asyncio.wait_for(
+                        langgraph_app.ainvoke(state),
+                        timeout=30.0,
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning("Queue task timed out for user %s", user_id)
+                    try:
+                        await bot_instance.edit_message_text(
+                            chat_id=state["chat_id"],
+                            message_id=state["reply_message_id"],
+                            text="Sorry, the request timed out. Please try again.",
+                        )
+                    except Exception:
+                        pass
+                    continue
+                except Exception as exc:
+                    logger.exception("Queue ainvoke failed for user %s", user_id)
+                    try:
+                        await bot_instance.edit_message_text(
+                            chat_id=state["chat_id"],
+                            message_id=state["reply_message_id"],
+                            text=f"Sorry, something went wrong: {exc}",
+                        )
+                    except Exception:
+                        pass
+                    continue
+
+            # Send response back to user
+            response = result.get("final_response", "")
+            if not response:
+                response = "I received your message but have nothing to say yet."
+            if len(response) > 4096:
+                response = response[:4093] + "..."
+
+            try:
+                await bot_instance.edit_message_text(
+                    chat_id=state["chat_id"],
+                    message_id=state["reply_message_id"],
+                    text=response,
+                )
+            except Exception as exc:
+                logger.warning("Failed to send queue response for user %s: %s", user_id, exc)
+
+        except Exception as exc:
+            logger.error("Queue consumer error: %s", exc)
+            await asyncio.sleep(1)
+
+
+# =================================================================== #
+#  Redis lifecycle helpers                                              #
+# =================================================================== #
+
+async def _init_queue():
+    """Create the Redis async connection."""
+    global _redis_client
+    try:
+        _redis_client = redis.asyncio.Redis(
+            host=settings.REDIS_HOST,
+            port=int(settings.REDIS_PORT),
+            decode_responses=True,
+        )
+        await _redis_client.ping()
+        logger.info("Redis queue connection established (%s:%s)", settings.REDIS_HOST, settings.REDIS_PORT)
+    except Exception as exc:
+        logger.warning("Redis queue unavailable, messages will be processed synchronously: %s", exc)
+        _redis_client = None
+
+
+async def _close_queue():
+    """Close the Redis connection."""
+    global _redis_client
+    if _redis_client is not None:
+        try:
+            await _redis_client.close()
+        except Exception:
+            pass
+        _redis_client = None
+
+
 def _sync_user_data(context: ContextTypes.DEFAULT_TYPE, result: dict):
     """Copy state fields that represent conversational flags back to user_data."""
     flags = [
@@ -440,6 +636,13 @@ if __name__ == "__main__":
     async def main():
         application = await init_app()
 
+        # Initialise Redis queue
+        await _init_queue()
+
+        # Start queue consumer as background task
+        bot_instance = application.bot
+        asyncio.create_task(conversation_queue_consumer(bot_instance))
+
         async with application:
             await application.start()
             await application.updater.start_polling()
@@ -449,6 +652,7 @@ if __name__ == "__main__":
             except (KeyboardInterrupt, SystemExit):
                 logger.info("Shutting down ...")
             finally:
+                await _close_queue()
                 await application.updater.stop()
                 await application.stop()
                 await close_global_resources()

@@ -76,6 +76,7 @@
 │  │                            END                                     │  │
 │  │                                                                      │  │
 │  │  另: analyze_document → Celery OCR + await 入库 → retrieve_rag → LLM (skip_memory)          │  │
+│  │     general_chat → Redis 队列 → 后台 worker → retrieve_rag → LLM   │  │
 │  │      receive_video_image/prompt → Celery 视频生成 → END             │  │
 │  └──────────────────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -698,7 +699,35 @@ User: "1" 或 "smooth zoom" 或 "default"
   └── 发送视频文件给用户
 ```
 
-### 5.5 文档分析流
+### 5.5 文本消息队列（削峰填谷）
+
+```
+用户发文字消息
+  │
+  ├── handle_text（限流 + 校验通过）
+  │
+  ├── 视频标记激活？
+  │   ├─ 是 → _run_sync（同步执行，需要 raw Telegram 对象）
+  │   └─ 否 → _enqueue_message
+  │            ├── 序列化 AgentState（剥离 _raw_update/_raw_context）
+  │            ├── redis.rpush("conversation_queue", json)
+  │            └── 回复 "Thinking..."（占位消息）
+  │
+  └── Queue Consumer（后台 asyncio 任务）
+       ├── redis.blpop("conversation_queue")
+       ├── json.loads → 重建 AgentState
+       ├── await langgraph_app.ainvoke(state)
+       ├── bot.edit_message_text(chat_id, message_id, response)
+       └── 循环
+```
+
+**设计要点**：
+- 队列无上限 → 瞬时洪峰不丢请求，全部排队处理
+- 消费并发 Semaphore(20) → 处理速率稳定，不压垮下游 LLM API
+- Redis 不可用时自动回退同步路径
+- 视频/文档分析不走队列（需 raw Telegram 对象下载文件）
+
+### 5.6 文档分析流
 
 ```
 User: [发送 PDF 文件 + caption "只分析第三章"]
