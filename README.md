@@ -40,7 +40,7 @@
 | 🧠 **对话记忆** | Milvus 向量记忆库 | 每次对话自动存入向量库，下次检索注入 prompt，跨会话持久化 |
 | 📚 **课程查询** | Milvus Hybrid RAG | 语义检索（课程代码 + 课程名称），支持 CSV/JSON 数据导入与 PDF 自动入库 |
 | 🎬 **图片转视频** | SiliconFlow Wan-AI + Celery | 图片分析 + AI 推荐动画 prompt + 后台生成 |
-| 📄 **文档分析** | PyMuPDF + Milvus RAG | PDF 文本提取 + **caption 指令解析**（指定范围）+ 分块入库后语义检索针对性回答 |
+| 📄 **文档分析** | PyMuPDF + Milvus RAG | PDF 文本提取 + **caption 指令解析**（指定范围）+ 分块入库后语义检索**（expr 文件隔离）**针对性回答 |
 | 🛡️ **高可用保护** | 熔断器 + 重试 + 限流 + Redis 队列 | LLM 熔断（5次失败切30s）、3次指数退避重试、每用户速率限制、Redis 队列削峰填谷、全局并发节流、Milvus 断连自动重建、Docker healthcheck |
 | 🖥️ **管理后台** | FastAPI + Web UI | 程序员通过浏览器上传课程数据 |
 

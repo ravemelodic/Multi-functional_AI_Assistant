@@ -347,6 +347,7 @@ async def retrieve_hybrid_with_scores(
     score_threshold: float = 0.5,
     dense_weight: float = 0.7,
     sparse_weight: float = 0.3,
+    expr: str | None = None,
 ) -> List[Tuple[Document, float]]:
     """
     Hybrid retrieval combining BM25 sparse scores + dense vector cosine similarity.
@@ -379,7 +380,7 @@ async def retrieve_hybrid_with_scores(
     vector_store = _get_cached_vector_store("course")
     try:
         raw_dense: List[Tuple[Document, float]] = await asyncio.to_thread(
-            lambda: vector_store.similarity_search_with_relevance_scores(query, k=k * 3),
+            lambda: vector_store.similarity_search_with_relevance_scores(query, k=k * 3, expr=expr) if expr else vector_store.similarity_search_with_relevance_scores(query, k=k * 3),
         )
     except Exception as exc:
         logger.warning("Dense search failed in hybrid mode: %s", exc)

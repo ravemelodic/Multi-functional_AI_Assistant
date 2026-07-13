@@ -172,6 +172,7 @@ async def retrieve_rag_node(state: AgentState) -> dict[str, Any]:
             score_threshold=0.5,
             dense_weight=settings.HYBRID_DENSE_WEIGHT,
             sparse_weight=settings.HYBRID_SPARSE_WEIGHT,
+            expr=state.get("rag_expr"),
         )
     except Exception as exc:
         logger.warning("RAG retrieval failed (Milvus may not be running): %s", exc)
@@ -583,6 +584,7 @@ async def analyze_document_node(state: AgentState) -> dict[str, Any]:
                     pdf_metadata = {
                         "source": "user_upload_pdf",
                         "filename": file_name,
+                        "file_uid": file.file_unique_id,
                         "user_id": state["user_id"],
                     }
                     await ingest_text(extracted_text, metadata=pdf_metadata)
@@ -601,6 +603,7 @@ async def analyze_document_node(state: AgentState) -> dict[str, Any]:
             return {
                 "user_message": clean_msg,
                 "skip_memory": True,
+                "rag_expr": f'file_uid == "{file.file_unique_id}"',
             }
         else:
             return {
