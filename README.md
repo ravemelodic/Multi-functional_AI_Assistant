@@ -582,11 +582,3 @@ A: `docker-compose logs -f` 查看所有日志，或 `docker-compose logs -f bot
 | [API_DOCS.md](API_DOCS.md) | FastAPI 接口文档 |
 
 ---
-
-## 📄 许可证
-
-本项目仅用于教育和研究目的。
-
----
-
-**Made with ❤️ for HKBU Students**
