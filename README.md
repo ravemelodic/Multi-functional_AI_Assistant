@@ -583,7 +583,7 @@ A: `docker-compose logs -f` 查看所有日志，或 `docker-compose logs -f bot
 - Redis 队列削峰填谷（文本消息 100% 入队，0 拒绝）
 - PDF 分析改为纯提取 + await 入库 + `retrieve_rag` 语义检索（去除 Celery AI 摘要）
 - 新增 `skip_memory` 机制，PDF 分析路径跳过对话记忆避免干扰
-- LangGraph 状态机 11 节点，3 类意图分叉后汇合
+- LangGraph 状态机 11 节点，bot路径与pdf上传路径分叉后汇合
 
 ---
 
