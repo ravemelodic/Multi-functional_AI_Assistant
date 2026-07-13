@@ -574,6 +574,20 @@ A: `docker-compose logs -f` 查看所有日志，或 `docker-compose logs -f bot
 
 ---
 
+## 📦 版本历史
+
+### v2.1（当前）
+- **expr 检索隔离**：PDF 分析路径新增 `file_uid` 元数据 + `rag_expr` 过滤，`retrieve_rag`（Dense + BM25）只搜索当前上传文件的 chunks，避免不同文档的同名章节内容互相干扰
+- 技术面试文档新增 Q12 完整项目介绍
+
+### v2.0
+- Redis 队列削峰填谷（文本消息 100% 入队，0 拒绝）
+- PDF 分析改为纯提取 + await 入库 + `retrieve_rag` 语义检索（去除 Celery AI 摘要）
+- 新增 `skip_memory` 机制，PDF 分析路径跳过对话记忆避免干扰
+- LangGraph 状态机 11 节点，3 类意图分叉后汇合
+
+---
+
 ## 📚 相关文档
 
 | 文档 | 说明 |
