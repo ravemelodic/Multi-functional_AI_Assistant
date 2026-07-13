@@ -36,7 +36,7 @@
 
 | 功能 | 技术实现 | 说明 |
 |------|----------|------|
-| 🤖 **AI 对话** | LangGraph + ChatGPT + Redis 队列 | 状态机驱动的多轮对话，意图自动分类，**Redis 削峰填谷** |
+| 🤖 **AI 对话** | LangGraph + ChatGPT + Redis 队列 | 状态机驱动的多轮对话，意图自动分类，**Redis 队列削峰填谷（0 拒绝）** |
 | 🧠 **对话记忆** | Milvus 向量记忆库 | 每次对话自动存入向量库，下次检索注入 prompt，跨会话持久化 |
 | 📚 **课程查询** | Milvus Hybrid RAG | 语义检索（课程代码 + 课程名称），支持 CSV/JSON 数据导入与 PDF 自动入库 |
 | 🎬 **图片转视频** | SiliconFlow Wan-AI + Celery | 图片分析 + AI 推荐动画 prompt + 后台生成 |
@@ -325,7 +325,8 @@ Telegram 用户                    管理员浏览器
 │  classify_intent                               │
 │    ├── video_command     → 视频工作流          │
 │    ├── retrieve_course   → Milvus Hybrid RAG   │
-│    ├── general_chat      → Redis 队列 → RAG    │
+│    ├── general_chat      → Redis 队列 → RAG     │
+│    │                      → 记忆 → LLM        │
 │    └── analyze_document  → Celery OCR + 入库   │
 │                           → RAG (skip 记忆)    │
 └───────────────┬───────────────────────────────┘
@@ -339,7 +340,7 @@ Telegram 用户                    管理员浏览器
         │            │
         ▼            ▼
 ┌──────────────────────────────┐
-│  Celery Workers (x30)         │
+│  Celery Workers                │
 │  ┌────────────┐  ┌────────┐  │
 │  │ Video      │  │  OCR   │  │
 │  │ x10 (×2)   │  │  x20   │  │

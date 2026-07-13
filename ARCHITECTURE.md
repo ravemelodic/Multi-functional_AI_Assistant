@@ -76,7 +76,7 @@
 │  │                            END                                     │  │
 │  │                                                                      │  │
 │  │  另: analyze_document → Celery OCR + await 入库 → retrieve_rag → LLM (skip_memory)          │  │
-│  │     general_chat → Redis 队列 → 后台 worker → retrieve_rag → LLM   │  │
+│  │     general_chat → Redis 队列 → 后台 worker → retrieve_rag → retrieve_memory → LLM   │  │
 │  │      receive_video_image/prompt → Celery 视频生成 → END             │  │
 │  └──────────────────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -585,10 +585,11 @@ User: "Explain cloud computing concepts"
   │
   ├── chatbot_agent.handle_text()
   │   ├── 构建 AgentState
-  │   └── await langgraph_app.ainvoke(state)
+  │   ├── _enqueue_message → Redis 队列（削峰填谷）
+  │   └── Queue Consumer → await langgraph_app.ainvoke(state)
   │
   ├── [Graph] classify_intent → "general_chat"
-  ├── [Graph] retrieve_rag  (-- 新增：所有对话先过 RAG)
+  ├── [Graph] retrieve_rag  (-- RAG 语义检索)
   │   ├── Milvus course_documents 集合语义检索
   │   ├── 命中课程 → rag_context 注入 prompt
   │   └── 未命中 → rag_context 为空
