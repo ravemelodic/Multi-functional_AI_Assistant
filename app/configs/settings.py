@@ -16,20 +16,20 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------ #
     #  Telegram                                                          #
     # ------------------------------------------------------------------ #
-    TELEGRAM_ACCESS_TOKEN: str = ""
+    TELEGRAM_ACCESS_TOKEN: str = "8517370440:AAEhvWStRQlrW9uFA3aCidb3TAQdQ7YcMPI"
 
     # ------------------------------------------------------------------ #
     #  Azure OpenAI (app.llm)                                       #
     # ------------------------------------------------------------------ #
-    CHATGPT_API_KEY: str = ""
-    CHATGPT_BASE_URL: str = ""
-    CHATGPT_MODEL: str = ""
-    CHATGPT_API_VER: str = ""
+    CHATGPT_API_KEY: str = "a053ead5-9ec1-4ca3-ac8d-08dd73a28ab7"
+    CHATGPT_BASE_URL: str = "https://genai.hkbu.edu.hk/api/v0/rest"
+    CHATGPT_MODEL: str = "gpt-5-mini"
+    CHATGPT_API_VER: str = "2024-12-01-preview"
 
     # ------------------------------------------------------------------ #
     #  SiliconFlow / Wan-AI (Image-to-Video)                              #
     # ------------------------------------------------------------------ #
-    WAN_AI_API_KEY: str = ""
+    WAN_AI_API_KEY: str = "sk-mubvhickdwyfyifhjthqkidqthzdxbvpulkzgyhjhftatqxz"
     WAN_AI_BASE_URL: str = "https://api.siliconflow.cn/v1"
     WAN_AI_MODEL: str = "Wan-AI/Wan2.2-I2V-A14B"
 
@@ -54,9 +54,9 @@ class Settings(BaseSettings):
     # To use the HKBU genai gateway, reuse the CHATGPT credentials.
     # If your gateway is Azure-format, set EMBEDDING_PROVIDER="azure"
     EMBEDDING_PROVIDER: str = "openai"       # "openai" or "azure"
-    EMBEDDING_API_KEY: str = ""
-    EMBEDDING_BASE_URL: str = ""
-    EMBEDDING_MODEL: str = "text-embedding-3-small"
+    EMBEDDING_API_KEY: str = "sk-ol-v1-fd6a031eed2dc47cbd0aded4da1c21dcd418a5968a1f592e2adb2013a6d6a5ff"
+    EMBEDDING_BASE_URL: str = "https://api.aliapi.me/v1"
+    EMBEDDING_MODEL: str = "bge-m3"
     EMBEDDING_API_VER: str = "2024-12-01-preview"
 
     # ------------------------------------------------------------------ #
