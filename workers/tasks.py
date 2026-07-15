@@ -182,27 +182,38 @@ def analyze_document_task(self, file_path, file_type, user_id):
             'success': False,
             'error': str(e),
             'user_id': user_id,
-        }def analyze_image_task(self, image_base64, user_id):
+        }
+
+@celery_app.task(
+    name='tasks.analyze_image',
+    bind=True,
+    autoretry_for=(Exception,),
+    max_retries=3,
+    retry_backoff=True,
+    retry_backoff_max=60,
+    retry_jitter=True,
+)
+def analyze_image_task(self, image_base64, user_id):
     """
     Task to analyze image with GPT and suggest video prompts
-    
+
     Args:
         image_base64: Base64 encoded image
         user_id: Telegram user ID
-    
+
     Returns:
         dict: Result with AI analysis and suggested prompts
     """
     logger.info(f"Starting image analysis task for user {user_id}")
-    
+
     try:
         # Load config
         config = configparser.ConfigParser()
         config.read('config.ini')
-        
+
         # Initialize ChatGPT
         gpt = ChatGPT(config)
-        
+
         # Analyze image
         ai_prompt = (
             "Analyze this image and provide:\n"
@@ -215,10 +226,10 @@ def analyze_document_task(self, file_path, file_type, user_id):
             "2. [prompt 2]\n"
             "3. [prompt 3]"
         )
-        
+
         # Use sync method in worker
         ai_response = gpt.submit_with_image_sync(ai_prompt, image_base64, use_image_analysis_prompt=True)
-        
+
         # Extract suggested prompts
         suggested_prompts = []
         lines = ai_response.split('\n')
@@ -227,16 +238,16 @@ def analyze_document_task(self, file_path, file_type, user_id):
                 prompt_text = line.split('.', 1)[1].strip()
                 if prompt_text:
                     suggested_prompts.append(prompt_text)
-        
+
         logger.info(f"Image analysis completed for user {user_id}")
-        
+
         return {
             'success': True,
             'analysis': ai_response,
             'suggested_prompts': suggested_prompts,
             'user_id': user_id
         }
-        
+
     except Exception as e:
         logger.error(f"Image analysis error for user {user_id}: {str(e)}")
         return {
