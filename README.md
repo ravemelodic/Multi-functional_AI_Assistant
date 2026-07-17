@@ -1,6 +1,6 @@
-# HKBU 智能助手 — Telegram 机器人
+# Telegram 多模态 AI 助手中台
 
-> 基于 LangGraph + Milvus RAG + FastAPI 的 Telegram 智能助手中台
+> 基于 LangGraph + Milvus RAG + FastAPI 的 Telegram 多模态 AI 助手中台
 
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue)](https://www.docker.com/)
 [![Python](https://img.shields.io/badge/Python-3.12-green)](https://www.python.org/)
@@ -32,7 +32,7 @@
 
 ## 👥 项目简介
 
-本项目是为 HKBU 学生打造的 **Telegram 智能助手中台**，具备以下核心能力：
+本项目是基于 LangGraph + RAG 的 **Telegram 多模态 AI 助手中台**，面向高校场景，具备以下核心能力：
 
 | 功能 | 技术实现 | 说明 |
 |------|----------|------|
@@ -54,7 +54,7 @@
 
 ```
 你: 你好
-Bot: 你好！我是 HKBU 课程助手，可以帮你查询课程信息...
+Bot: 你好！我是 AI 课程助手，可以帮你查询课程信息...
 
 你: 给我讲讲云计算
 Bot: 云计算是通过互联网提供计算资源的服务模式...
