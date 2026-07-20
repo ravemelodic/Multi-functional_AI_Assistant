@@ -10,6 +10,7 @@ from pydantic_settings import BaseSettings
 from typing import Optional
 import configparser
 import json
+import os
 from pathlib import Path
 
 
@@ -136,9 +137,15 @@ class Settings(BaseSettings):
             kwargs["EMBEDDING_PROVIDER"] = ini["EMBEDDING"].get("PROVIDER", "openai")
 
         # Read optional [APP] section for misc paths
+        # NOTE: config.ini values are passed as __init__ kwargs, which Pydantic
+        # treats as higher priority than env vars. To allow Docker env var
+        # overrides (LOG_DIR, TEMP_DIR from docker-compose.yml), we skip
+        # reading from config.ini when a matching env var is already set.
         if ini.has_section("APP"):
-            kwargs["TEMP_DIR"] = ini["APP"].get("TEMP_DIR", "/comp7940-lab/temp")
-            kwargs["LOG_DIR"] = ini["APP"].get("LOG_DIR", "/comp7940-lab/logs")
+            if "LOG_DIR" not in os.environ:
+                kwargs["LOG_DIR"] = ini["APP"].get("LOG_DIR", "/comp7940-lab/logs")
+            if "TEMP_DIR" not in os.environ:
+                kwargs["TEMP_DIR"] = ini["APP"].get("TEMP_DIR", "/comp7940-lab/temp")
 
         # Merge with env-var overrides (env vars win)
         return cls(**kwargs)

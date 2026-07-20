@@ -126,6 +126,11 @@ services:
       MILVUS_HOST: milvus
       MILVUS_PORT: 19530
       BOT_LOG_LEVEL: INFO
+      # Override config.ini APP paths — those point to WSL paths that don't
+      # exist inside the container. Use Docker-internal paths that match
+      # the volume mounts below.
+      LOG_DIR: /comp7940-lab/logs
+      TEMP_DIR: /comp7940-lab/temp
     volumes:
       - ./config.ini:/comp7940-lab/config.ini:ro
       - ./logs:/comp7940-lab/logs
@@ -152,6 +157,8 @@ services:
       WORKER_TYPE: video
       MILVUS_HOST: milvus
       MILVUS_PORT: 19530
+      LOG_DIR: /comp7940-lab/logs
+      TEMP_DIR: /comp7940-lab/temp
     volumes:
       - ./config.ini:/comp7940-lab/config.ini:ro
       - ./logs:/comp7940-lab/logs
@@ -187,6 +194,8 @@ services:
       WORKER_TYPE: ocr
       MILVUS_HOST: milvus
       MILVUS_PORT: 19530
+      LOG_DIR: /comp7940-lab/logs
+      TEMP_DIR: /comp7940-lab/temp
     volumes:
       - ./config.ini:/comp7940-lab/config.ini:ro
       - ./logs:/comp7940-lab/logs
@@ -226,8 +235,9 @@ services:
       MILVUS_PORT: 19530
       # Admin tokens — JSON object mapping token → role
       # Roles: "upload" (can upload + view) | "view" (view-only)
+      # YAML: JSON string must be quoted with single quotes!
       # Generate tokens: python3 -c "import secrets; print(secrets.token_hex(32))"
-      - ADMIN_TOKENS_JSON={"ddd53ef28d8a732a95e0390f770fb926b48bf44722efa9ebf86dfed5b7d4818a":"upload","b7731d95f3e7507fcd735b1d1cd35d4d3ecdac9c8e2ebb1fc7d3a6178ba662c2":"upload","5d07bc36f2a149fa553fbf11e783a9b4a3e6f3df7164205d3fa145d046b22568":"upload","682452777f4aa7cf40cc4f8541ccb15d1d6c425f2dd9bb338b4ad7b003594861":"view","a7d969f126dfad0c726cdfd35301192ce21ea8e77e6264844e6114ac081cfdb7":"view"}
+      ADMIN_TOKENS_JSON: '{"ddd53ef28d8a732a95e0390f770fb926b48bf44722efa9ebf86dfed5b7d4818a":"upload","b7731d95f3e7507fcd735b1d1cd35d4d3ecdac9c8e2ebb1fc7d3a6178ba662c2":"upload","5d07bc36f2a149fa553fbf11e783a9b4a3e6f3df7164205d3fa145d046b22568":"upload","682452777f4aa7cf40cc4f8541ccb15d1d6c425f2dd9bb338b4ad7b003594861":"view","a7d969f126dfad0c726cdfd35301192ce21ea8e77e6264844e6114ac081cfdb7":"view"}'
     ports:
       - "8000:8000"
     volumes:
