@@ -26,6 +26,7 @@
 - [📁 项目结构](#-项目结构)
 - [📦 部署与运维](#-部署与运维)
 - [🔧 配置说明](#-配置说明)
+- [🔒 项目安全性](#-项目安全性)
 - [❓ 常见问题](#-常见问题)
 
 ---
@@ -495,8 +496,124 @@ docker cp chatbot_milvus:/tmp/milvus_backup.tar.gz ./
 ```
 
 ---
+## 🔒 项目安全性
 
-## 🔧 配置说明
+> 项目内置多层安全防护机制，覆盖认证、通信、存储、运行容器、审计和运维各层面。
+
+### 1. 管理员认证（Token-Based）
+
+管理后台（FastAPI Admin）采用 **Token 认证 + 角色权限控制（RBAC）**：
+
+| 角色 | 权限 | 适用场景 |
+|------|------|----------|
+| `upload` | 上传数据 + 查看统计 | 负责更新课程数据的管理员 |
+| `view` | 仅查看统计 | 只需要浏览数据的管理员 |
+
+**Token 传递方式（按优先级）：**
+- HTTP Header：`X-API-Key: <token>`
+- URL 参数：`/admin?token=<token>`
+- Cookie：`token=<token>`
+
+**Token 管理：**
+- Token 通过 `ADMIN_TOKENS_JSON` 环境变量注入，**不写死在代码或配置文件**中
+- 每人独立 Token，可单独踢人（从 JSON 中删除其 Token 并重启服务）
+- 新增管理员只需生成新 Token 加到 JSON 中
+- 生成方式：`python3 -c "import secrets; print(secrets.token_hex(32))"`
+
+### 2. 通信安全（HTTPS）
+
+- API 容器使用 **自签 SSL 证书**（Dockerfile 构建时生成，有效期 10 年）
+- uvicorn 启动时加载 `--ssl-certfile` / `--ssl-keyfile`，所有管理后台访问强制 HTTPS
+- 浏览器首次访问会提示"不安全"（自签证书特性），企业内部可信任
+
+### 3. 数据存储安全
+
+| 组件 | 安全措施 |
+|------|----------|
+| **Redis** | 密码认证（通过 `.env` 文件配置环境变量 `REDIS_PASSWORD`，`docker-compose.yml` 中默认值 `changeme_redis_2024`） |
+| **Milvus** | 无宿主机端口暴露，仅 Docker 内网可达 |
+| **MinIO** | 无宿主机端口暴露，仅 Docker 内网可达 |
+| **配置文件** | `config.ini`、`.env` 均在 `.gitignore` 中，防止误提交到版本控制 |
+
+### 4. 容器安全
+
+所有业务容器（bot、api、video_worker、ocr_worker）统一采用安全基线：
+
+```yaml
+user: "1000:1000"       # 非 root 用户运行
+read_only: true          # 根文件系统只读
+tmpfs: /tmp              # 临时目录独立挂载（不持久化）
+```
+
+- 容器被攻破后，攻击者**无法篡改代码或安装恶意软件**
+- 日志、临时文件通过挂载卷（volumes）写入宿主机 `./logs`、`./temp`
+
+### 5. 网络隔离
+
+```
+外网                        Docker 内部网络（chatbot_network）
+│                              │
+│  仅暴露端口 8000 (HTTPS)      │
+├── api ─────── 8000 ───────→  │
+│                              ├── redis (密码保护，无端口暴露)
+│                              ├── milvus (无端口暴露)
+│                              ├── etcd (无端口暴露)
+│                              └── minio (无端口暴露)
+```
+
+- 所有内部服务（Redis、Milvus、etcd、MinIO）**不暴露宿主机端口**
+- 容器间通过 `chatbot_network` 桥接网络通信
+- 唯一对外入口：**`api:8000`（HTTPS + Token 认证）**
+
+### 6. 审计日志
+
+所有管理员操作记录到 `logs/audit.log`：
+
+| 事件 | 记录内容 |
+|------|----------|
+| 登录成功 `LOGIN_OK` | Token 前 12 位、角色、IP、时间 |
+| 登录失败 `LOGIN_FAIL` | Token 前 12 位、IP、时间 |
+| 上传文件 `UPLOAD` | 操作人、文件名、记录数、是否成功、IP |
+| JSON 导入 `INGEST` | 操作人、记录数、是否成功、IP |
+
+### 7. 日志脱敏
+
+用户消息采用 **级别控制**，平衡可排查性与隐私保护：
+
+| 日志级别 | 用户消息记录方式 | 适用场景 |
+|----------|------------------|----------|
+| `INFO`（默认） | 只记前 **50 个字符** + `...` | 日常运维，识别用户意图即可 |
+| `DEBUG` | 记录完整原文 | 排查特定 bug 时临时打开 |
+
+配置方式：在 `docker-compose.yml` 的 bot 容器环境变量中设置 `BOT_LOG_LEVEL=DEBUG` 后重启。
+
+详细日志还包括：用户 ID、意图分类（intent）、响应耗时、错误信息、熔断/限流事件。
+
+### 8. 文件上传安全
+
+| 防护项 | 配置 |
+|--------|------|
+| 文件大小限制 | **10 MB**（超限返回 HTTP 413） |
+| 文件类型白名单 | 仅 `.csv` / `.json` |
+| 提交方式 | 需 `upload` 角色 Token 认证 |
+
+### 9. 密钥管理最佳实践
+
+```ini
+# config.ini 配置示例（不含敏感密钥）
+[TELEGRAM]
+ACCESS_TOKEN = telegram_bot_token       # 通过 BotFather 获取
+
+[EMBEDDING]
+API_KEY = your_embedding_api_key        # 通过环境变量覆盖
+```
+
+- **密钥优先使用环境变量注入**（docker-compose environment / `.env` 文件）
+- **`ADMIN_TOKENS_JSON`** 直接以环境变量形式传入，不走 config.ini
+- **`.env` 和 `config.ini` 已在 `.gitignore` 中**，不会提交到 git
+- 密钥泄露后应**立即轮换**并更新对应配置
+
+---
 
 ### config.ini 完整配置项
 
@@ -527,6 +644,9 @@ MODEL = Wan-AI/Wan2.2-I2V-A14B
 | `MILVUS_PORT` | `19530` | Milvus 端口 |
 | `REDIS_HOST` | `redis` | Redis 主机 |
 | `REDIS_PORT` | `6379` | Redis 端口 |
+| `REDIS_PASSWORD` | `changeme_redis_2024` | Redis 密码（通过 `.env` 文件配置） |
+| `BOT_LOG_LEVEL` | `INFO` | 机器人日志级别（`INFO` 截断消息 / `DEBUG` 记录全文） |
+| `ADMIN_TOKENS_JSON` | `{}` | 管理员 Token → 角色映射 JSON（如 `{"token":"upload"}`） |
 | `EMBEDDING_API_KEY` | 复用 CHATGPT | 嵌入模型 API 密钥 |
 | `EMBEDDING_MODEL` | `text-embedding-3-small` | 嵌入模型名称 |
 

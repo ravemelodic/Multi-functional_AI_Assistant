@@ -41,13 +41,30 @@ from app.configs.settings import settings
 # ------------------------------------------------------------------ #
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO,
+    level=getattr(logging, settings.BOT_LOG_LEVEL.upper(), logging.INFO),
     handlers=[
         logging.FileHandler(f"{settings.LOG_DIR}/bot.log"),
         logging.StreamHandler(),
     ],
 )
 logger = logging.getLogger(__name__)
+
+# ------------------------------------------------------------------ #
+#  Log-safe helper – truncate sensitive user data at INFO level       #
+# ------------------------------------------------------------------ #
+
+def _safe_msg(msg: str, max_len: int = 50) -> str:
+    """
+    Return a truncated version of the user message for INFO-level logs.
+    At DEBUG level the full message is logged.
+    At INFO level (and above), only the first ``max_len`` characters are kept
+    — enough to understand intent, not enough to leak full content.
+    """
+    if logger.isEnabledFor(logging.DEBUG):
+        return msg
+    if len(msg) <= max_len:
+        return msg
+    return msg[:max_len] + "..."
 
 # =================================================================== #
 #  Rate Limiter (per-user sliding window, in-memory)                  #
@@ -160,7 +177,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     user_id = update.effective_user.id
     user_msg = update.message.text.strip()
-    logger.info("Text from user %d: %.80s", user_id, user_msg)
+    logger.info("Text from user %d: %s", user_id, _safe_msg(user_msg))
 
     # -- Rate limiting --------------------------------------------------
     allowed, retry_after = await rate_limiter.check(user_id)
@@ -558,12 +575,13 @@ async def conversation_queue_consumer(bot_instance) -> None:
 # =================================================================== #
 
 async def _init_queue():
-    """Create the Redis async connection."""
+    """Create the Redis async connection (with optional password)."""
     global _redis_client
     try:
         _redis_client = redis.asyncio.Redis(
             host=settings.REDIS_HOST,
             port=int(settings.REDIS_PORT),
+            password=settings.REDIS_PASSWORD or None,
             decode_responses=True,
         )
         await _redis_client.ping()

@@ -232,6 +232,55 @@ COMP7940,Quiz 1,2025-03-01 23:59,Basic concepts of NLP,10%</pre>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 // ===================================================================
+//  Auth — token is injected by the server via /admin?token=xxx
+// ===================================================================
+const TOKEN = window.__TOKEN__ || '';
+const ROLE = window.__ROLE__ || 'view';
+const CAN_UPLOAD = ROLE === 'upload' || ROLE === 'admin';
+
+// If no token, redirect to /login
+if (!TOKEN) {
+  window.location.href = '/login';
+}
+
+// Hide upload UI for view-only admins
+if (!CAN_UPLOAD) {
+  document.addEventListener('DOMContentLoaded', function() {
+    // Hide the upload card and results card for view-only users
+    var uploadCard = document.querySelector('.col-lg-7');
+    var resultsCard = document.getElementById('resultsCard');
+    if (uploadCard) {
+      uploadCard.innerHTML = '<div class="card"><div class="card-body text-center py-5">'
+        + '<div style="font-size: 3rem; margin-bottom: 1rem;">👀</div>'
+        + '<h5>View-Only Mode</h5>'
+        + '<p class="text-muted">Your account has view-only permissions.<br>'
+        + 'Contact an administrator to upload data.</p>'
+        + '</div></div>';
+    }
+  });
+}
+
+// Wrapped fetch that includes the auth token
+async function authFetch(url, options = {}) {
+  options.headers = options.headers || {};
+  options.headers['X-API-Key'] = TOKEN;
+  try {
+    const r = await fetch(url, options);
+    if (r.status === 401) {
+      // Token expired or invalid — redirect to login
+      window.location.href = '/login';
+      throw new Error('Unauthorized');
+    }
+    if (r.status === 403) {
+      throw new Error('Insufficient permissions — upload role required');
+    }
+    return r;
+  } catch (err) {
+    throw err;
+  }
+}
+
+// ===================================================================
 //  Utility helpers
 // ===================================================================
 const API_BASE = '';
@@ -326,7 +375,7 @@ uploadBtn.addEventListener('click', async () => {
   uploadBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Uploading…';
 
   try {
-    const r = await fetch(`${API_BASE}/api/upload`, { method: 'POST', body: form });
+    const r = await authFetch(`${API_BASE}/api/upload`, { method: 'POST', body: form });
     const d = await r.json();
     if (d.success) {
       showToast(d.message, 'success');
@@ -365,7 +414,7 @@ document.getElementById('ingestBtn').addEventListener('click', async () => {
   btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Ingesting…';
 
   try {
-    const r = await fetch(`${API_BASE}/api/ingest`, {
+    const r = await authFetch(`${API_BASE}/api/ingest`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ source_type: sourceType, data: parsed }),
@@ -395,7 +444,7 @@ async function refreshStats() {
   const body = document.getElementById('statsBody');
   body.innerHTML = '<p class="text-muted small mb-0"><span class="spinner-border spinner-border-sm"></span> Loading…</p>';
   try {
-    const r = await fetch(`${API_BASE}/api/stats`);
+    const r = await authFetch(`${API_BASE}/api/stats`);
     const d = await r.json();
     if (d.total_samples_shown > 0) {
       let html = `<table class="table table-sm table-borderless mb-0" id="statsTable"><thead><tr><th>Entry</th><th class="text-end">Chunks</th></tr></thead><tbody>`;

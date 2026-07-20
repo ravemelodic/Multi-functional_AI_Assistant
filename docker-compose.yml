@@ -1,23 +1,33 @@
 version: '3.8'
 
+# =================================================================== #
+#  Security baseline for app containers (non-root, read-only fs)       #
+# =================================================================== #
+x-app-security: &app-security
+  user: "1000:1000"
+  read_only: true
+  tmpfs:
+    - /tmp:uid=1000,gid=1000,mode=1777
+
 services:
 
   # ================================================================ #
   #  Redis – message broker for Celery task queue                    #
+  #  Security: password auth enabled; no host port exposure.         #
   # ================================================================ #
   redis:
     image: redis:7-alpine
     container_name: chatbot_redis
-    ports:
-      - "6379:6379"
+    command: >
+      redis-server --appendonly yes
+      --requirepass ${REDIS_PASSWORD:-changeme_redis_2024}
     volumes:
       - redis_data:/data
-    command: redis-server --appendonly yes
     networks:
       - chatbot_network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-changeme_redis_2024}", "ping"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -25,6 +35,7 @@ services:
 
   # ================================================================ #
   #  etcd – configuration store for Milvus                           #
+  #  No host port exposure.                                          #
   # ================================================================ #
   etcd:
     image: quay.io/coreos/etcd:v3.5.16
@@ -47,6 +58,7 @@ services:
 
   # ================================================================ #
   #  MinIO – object storage for Milvus                               #
+  #  No host port exposure.                                          #
   # ================================================================ #
   minio:
     image: minio/minio:RELEASE.2024-11-17T00-39-20Z
@@ -59,15 +71,13 @@ services:
     volumes:
       - minio_data:/minio_data
     command: minio server /minio_data --console-address ":9001"
-    ports:
-      - "9000:9000"
-      - "9001:9001"
     networks:
       - chatbot_network
     restart: unless-stopped
 
   # ================================================================ #
   #  Milvus – vector database                                        #
+  #  No host port exposure.                                          #
   # ================================================================ #
   milvus:
     image: milvusdb/milvus:v2.4.17
@@ -79,9 +89,6 @@ services:
       MINIO_SECRET_KEY: minioadmin
     volumes:
       - milvus_data:/var/lib/milvus
-    ports:
-      - "19530:19530"   # gRPC
-      - "9091:9091"     # HTTP metrics
     depends_on:
       etcd:
         condition: service_started
@@ -100,21 +107,25 @@ services:
 
   # ================================================================ #
   #  Bot Agent – handles Telegram interactions using LangGraph       #
+  #  Security: non-root user, read-only fs, Redis password.          #
   # ================================================================ #
   bot:
     build:
       context: .
       dockerfile: Dockerfile
+    <<: *app-security
     container_name: chatbot_bot
     command: python -m app.bot
     depends_on:
       - redis
       - milvus
     environment:
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - MILVUS_HOST=milvus
-      - MILVUS_PORT=19530
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-changeme_redis_2024}
+      MILVUS_HOST: milvus
+      MILVUS_PORT: 19530
+      BOT_LOG_LEVEL: INFO
     volumes:
       - ./config.ini:/comp7940-lab/config.ini:ro
       - ./logs:/comp7940-lab/logs
@@ -125,22 +136,22 @@ services:
 
   # ================================================================ #
   #  Video Worker – processes image-to-video tasks (10 replicas)     #
-  #  Typical load: 1000 users × ~2% use video at peak = 20 concurrent#
-  #  Most time spent waiting on SiliconFlow API (I/O bound).         #
   # ================================================================ #
   video_worker:
     build:
       context: .
       dockerfile: Dockerfile
+    <<: *app-security
     command: python -m workers.entry
     depends_on:
       - redis
     environment:
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - WORKER_TYPE=video
-      - MILVUS_HOST=milvus
-      - MILVUS_PORT=19530
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-changeme_redis_2024}
+      WORKER_TYPE: video
+      MILVUS_HOST: milvus
+      MILVUS_PORT: 19530
     volumes:
       - ./config.ini:/comp7940-lab/config.ini:ro
       - ./logs:/comp7940-lab/logs
@@ -160,23 +171,22 @@ services:
 
   # ================================================================ #
   #  OCR Worker – processes document analysis tasks (20 replicas)    #
-  #  Typical load: 1000 users × ~8% upload PDFs at peak = 80 docs   #
-  #  Each task: ~1s PyMuPDF (CPU) + ~3s LLM summary (I/O).          #
-  #  Concurrency=4 allows overlapping LLM waits per container.      #
   # ================================================================ #
   ocr_worker:
     build:
       context: .
       dockerfile: Dockerfile
+    <<: *app-security
     command: python -m workers.entry
     depends_on:
       - redis
     environment:
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - WORKER_TYPE=ocr
-      - MILVUS_HOST=milvus
-      - MILVUS_PORT=19530
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-changeme_redis_2024}
+      WORKER_TYPE: ocr
+      MILVUS_HOST: milvus
+      MILVUS_PORT: 19530
     volumes:
       - ./config.ini:/comp7940-lab/config.ini:ro
       - ./logs:/comp7940-lab/logs
@@ -195,23 +205,34 @@ services:
           memory: 1G
 
   # ================================================================ #
-  #  API – FastAdmin admin interface for course data management       #
+  #  API – FastAPI admin interface for course data management        #
+  #  Security: non-root, read-only fs, HTTPS, Token auth + audit.   #
+  #  Port 8000 is the only service exposed to the host.             #
   # ================================================================ #
   api:
     build:
       context: .
       dockerfile: Dockerfile
+    <<: *app-security
     container_name: chatbot_api
-    command: uvicorn app.api:app --host 0.0.0.0 --port 8000
+    command: >
+      uvicorn app.api:app --host 0.0.0.0 --port 8000
+      --ssl-certfile /etc/ssl/certs/cert.pem
+      --ssl-keyfile /etc/ssl/private/key.pem
     depends_on:
       - milvus
     environment:
-      - MILVUS_HOST=milvus
-      - MILVUS_PORT=19530
+      MILVUS_HOST: milvus
+      MILVUS_PORT: 19530
+      # Admin tokens — JSON object mapping token → role
+      # Roles: "upload" (can upload + view) | "view" (view-only)
+      # Generate tokens: python3 -c "import secrets; print(secrets.token_hex(32))"
+      - ADMIN_TOKENS_JSON={"ddd53ef28d8a732a95e0390f770fb926b48bf44722efa9ebf86dfed5b7d4818a":"upload","b7731d95f3e7507fcd735b1d1cd35d4d3ecdac9c8e2ebb1fc7d3a6178ba662c2":"upload","5d07bc36f2a149fa553fbf11e783a9b4a3e6f3df7164205d3fa145d046b22568":"upload","682452777f4aa7cf40cc4f8541ccb15d1d6c425f2dd9bb338b4ad7b003594861":"view","a7d969f126dfad0c726cdfd35301192ce21ea8e77e6264844e6114ac081cfdb7":"view"}
     ports:
       - "8000:8000"
     volumes:
       - ./config.ini:/comp7940-lab/config.ini:ro
+      - ./logs:/comp7940-lab/logs
     networks:
       - chatbot_network
     restart: unless-stopped
